@@ -1,29 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { monthsOf, monthRange, latestMonth } from '../src/calendar'
+import { treeOf, monthRange, dayRange, latestMonth } from '../src/calendar'
 
 
-describe('monthsOf', () => {
-  it('연도별로 묶고 월을 오름차순으로 낸다', () => {
+describe('treeOf', () => {
+  it('연 > 월 > 일로 묶는다', () => {
     const isos = [
       '2025-03-10T09:00:00',
       '2024-12-01T09:00:00',
       '2025-01-05T09:00:00',
+      '2025-03-02T22:00:00',
     ]
 
-    expect(monthsOf(isos)).toEqual([
-      { year: 2024, months: [12] },
-      { year: 2025, months: [1, 3] },
+    expect(treeOf(isos)).toEqual([
+      { year: 2024, months: [{ month: 12, days: [1] }] },
+      { year: 2025, months: [{ month: 1, days: [5] }, { month: 3, days: [2, 10] }] },
     ])
   })
 
-  it('같은 달이 여러 번 나와도 한 번만 낸다', () => {
-    const isos = ['2026-07-01T09:00:00', '2026-07-24T18:00:00']
+  it('같은 날이 여러 번 나와도 한 번만 낸다', () => {
+    const isos = ['2026-07-24T09:00:00', '2026-07-24T18:00:00']
 
-    expect(monthsOf(isos)).toEqual([{ year: 2026, months: [7] }])
+    expect(treeOf(isos)).toEqual([
+      { year: 2026, months: [{ month: 7, days: [24] }] },
+    ])
   })
 
   it('빈 목록은 빈 트리를 낸다', () => {
-    expect(monthsOf([])).toEqual([])
+    expect(treeOf([])).toEqual([])
   })
 })
 
@@ -37,9 +40,21 @@ describe('monthRange', () => {
   })
 
   it('12월은 다음 해 1월로 넘어간다', () => {
-    const { to } = monthRange(2026, 12)
+    expect(monthRange(2026, 12).to).toBe(new Date(2027, 0, 1).toISOString())
+  })
+})
 
-    expect(to).toBe(new Date(2027, 0, 1).toISOString())
+
+describe('dayRange', () => {
+  it('그 날의 시작과 다음 날 시작을 낸다', () => {
+    const { from, to } = dayRange(2026, 7, 24)
+
+    expect(from).toBe(new Date(2026, 6, 24).toISOString())
+    expect(to).toBe(new Date(2026, 6, 25).toISOString())
+  })
+
+  it('말일은 다음 달로 넘어간다', () => {
+    expect(dayRange(2026, 7, 31).to).toBe(new Date(2026, 7, 1).toISOString())
   })
 })
 
@@ -47,8 +62,8 @@ describe('monthRange', () => {
 describe('latestMonth', () => {
   it('가장 최근 연월을 고른다', () => {
     const tree = [
-      { year: 2024, months: [12] },
-      { year: 2026, months: [1, 7] },
+      { year: 2024, months: [{ month: 12, days: [1] }] },
+      { year: 2026, months: [{ month: 1, days: [5] }, { month: 7, days: [24] }] },
     ]
 
     expect(latestMonth(tree)).toEqual({ year: 2026, month: 7 })

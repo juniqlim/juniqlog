@@ -1,7 +1,8 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
 import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
-import { monthsOf, monthRange, latestMonth, type YearNode, type YearMonth } from './calendar'
+import { treeOf, monthRange, dayRange, latestMonth, type YearNode } from './calendar'
+import { extractTags, splitByTags } from './tags'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -9,7 +10,10 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 /** 무엇을 보고 있는가 — 달 단위 또는 태그 단위 */
-type View = { kind: 'month'; year: number; month: number } | { kind: 'tag'; tag: string }
+type View =
+  | { kind: 'month'; year: number; month: number }
+  | { kind: 'day'; year: number; month: number; day: number }
+  | { kind: 'tag'; tag: string }
 
 const TABS = [
   { id: 'date', label: '날짜' },
@@ -23,6 +27,7 @@ let tags: TagCount[] = []
 let view: View | null = null
 let tab: TabId = 'date'
 let openYears = new Set<number>()
+let openMonths = new Set<string>()
 let channel: ReturnType<typeof sb.channel> | null = null
 
 const $ = (id: string) => document.getElementById(id)!
@@ -86,13 +91,13 @@ async function loadIndex() {
     .select('created_at, tags').is('deleted_at', null)
   if (error) { console.error(error); return }
   const rows = data ?? []
-  tree = monthsOf(rows.map(r => r.created_at as string))
+  tree = treeOf(rows.map(r => r.created_at as string))
   tags = tagsOf(rows.map(r => ({ tags: (r.tags ?? []) as string[] })))
   if (!view) {
     const latest = latestMonth(tree)
     view = latest ? { kind: 'month', ...latest } : thisMonth()
   }
-  if (view.kind === 'month') openYears.add(view.year)
+  if (view.kind !== 'tag') openYears.add(view.year)
 }
 
 async function loadEntries() {
@@ -100,6 +105,9 @@ async function loadEntries() {
   let q = sb.from('entries').select('*').is('deleted_at', null)
   if (view.kind === 'month') {
     const { from, to } = monthRange(view.year, view.month)
+    q = q.gte('created_at', from).lt('created_at', to)
+  } else if (view.kind === 'day') {
+    const { from, to } = dayRange(view.year, view.month, view.day)
     q = q.gte('created_at', from).lt('created_at', to)
   } else {
     q = q.contains('tags', [view.tag])
@@ -125,7 +133,7 @@ async function submit() {
   const body = ta.value
   if (body.trim() === '') return
   ta.value = ''; ta.style.height = '42px'
-  const { error } = await sb.from('entries').insert({ body })
+  const { error } = await sb.from('entries').insert({ body, tags: extractTags(body) })
   if (error) { console.error(error); alert('저장 실패: ' + error.message); return }
   view = thisMonth()
   await refresh()
@@ -186,25 +194,51 @@ function renderSidebar() {
 function renderDateTree(box: HTMLElement) {
   if (tree.length === 0) { box.innerHTML = '<div class="empty">아직 로그가 없습니다</div>'; return }
 
+  const pad = (n: number) => String(n).padStart(2, '0')
+
   for (const node of tree) {
-    const open = openYears.has(node.year)
+    const yearOpen = openYears.has(node.year)
     const y = document.createElement('button')
     y.className = 'yr'
-    y.innerHTML = `<span class="caret">${open ? '⌄' : '›'}</span><span class="sq"></span><span>${node.year}</span>`
+    y.innerHTML = `<span class="caret">${yearOpen ? '⌄' : '›'}</span><span>${node.year}</span>`
     y.onclick = () => {
-      open ? openYears.delete(node.year) : openYears.add(node.year)
+      yearOpen ? openYears.delete(node.year) : openYears.add(node.year)
       renderSidebar()
     }
     box.appendChild(y)
+    if (!yearOpen) continue
 
-    if (!open) continue
-    for (const m of node.months) {
-      const on = view?.kind === 'month' && view.year === node.year && view.month === m
-      const b = document.createElement('button')
-      b.className = 'mo' + (on ? ' on' : '')
-      b.innerHTML = `<span class="sq"></span><span>${String(m).padStart(2, '0')}</span>`
-      b.onclick = () => pick({ kind: 'month', year: node.year, month: m })
-      box.appendChild(b)
+    for (const mn of node.months) {
+      const key = `${node.year}-${mn.month}`
+      const monthOpen = openMonths.has(key)
+      const on = view?.kind === 'month' && view.year === node.year && view.month === mn.month
+
+      const m = document.createElement('div')
+      m.className = 'row mo' + (on ? ' on' : '')
+      const caret = document.createElement('button')
+      caret.className = 'caret btn'
+      caret.textContent = monthOpen ? '⌄' : '›'
+      caret.onclick = () => {
+        monthOpen ? openMonths.delete(key) : openMonths.add(key)
+        renderSidebar()
+      }
+      const label = document.createElement('button')
+      label.className = 'label'
+      label.textContent = pad(mn.month)
+      label.onclick = () => pick({ kind: 'month', year: node.year, month: mn.month })
+      m.append(caret, label)
+      box.appendChild(m)
+      if (!monthOpen) continue
+
+      for (const d of mn.days) {
+        const dayOn = view?.kind === 'day'
+          && view.year === node.year && view.month === mn.month && view.day === d
+        const b = document.createElement('button')
+        b.className = 'dy' + (dayOn ? ' on' : '')
+        b.textContent = pad(d)
+        b.onclick = () => pick({ kind: 'day', year: node.year, month: mn.month, day: d })
+        box.appendChild(b)
+      }
     }
   }
 }
@@ -233,11 +267,16 @@ function renderHeading() {
   const fb = $('filter')
   if (!view) { fb.hidden = true; return }
   fb.hidden = false
+  const pad = (n: number) => String(n).padStart(2, '0')
   if (view.kind === 'tag') {
     fb.innerHTML = `태그 <b>#${view.tag}</b> 모아보기 · <a id="back">이번 달로</a>`
     fb.querySelector<HTMLElement>('#back')!.onclick = () => pick(thisMonth())
+  } else if (view.kind === 'day') {
+    fb.innerHTML = `<b>${view.year}. ${pad(view.month)}. ${pad(view.day)}</b> · <a id="back">이 달 전체</a>`
+    fb.querySelector<HTMLElement>('#back')!.onclick = () =>
+      pick({ kind: 'month', year: (view as { year: number }).year, month: (view as { month: number }).month })
   } else {
-    fb.innerHTML = `<b>${view.year}. ${String(view.month).padStart(2, '0')}</b>`
+    fb.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
   }
 }
 
@@ -258,30 +297,38 @@ function renderTimeline() {
       const el = document.createElement('div')
       el.className = 'entry'
       el.innerHTML = `<div class="head">
-          <span class="time">${timeOf(e.created_at)}</span>
+          <span class="meta"><span class="time">${timeOf(e.created_at)}</span></span>
           <span class="actions">
             <button class="act tag" title="태그 달기">＃</button>
             <button class="act del" title="삭제">×</button>
           </span>
         </div>
         <div class="body"></div>`
-      el.querySelector<HTMLElement>('.body')!.textContent = e.body
       el.querySelector<HTMLElement>('.del')!.onclick = () => removeEntry(e)
       el.querySelector<HTMLElement>('.tag')!.onclick = () => {
         const t = prompt('태그')?.trim()
         if (t) addTag(e, t)
       }
 
-      if (e.tags.length > 0) {
-        const box = document.createElement('div')
-        box.className = 'tags'
-        for (const t of e.tags) {
-          const chip = document.createElement('span')
-          chip.className = 'chip'; chip.textContent = '#' + t
-          chip.onclick = () => pick({ kind: 'tag', tag: t })
-          box.appendChild(chip)
+      // 태그 칩은 시분초 옆에 (본문 아래 줄을 쓰지 않도록)
+      const meta = el.querySelector('.meta')!
+      for (const t of e.tags) {
+        const chip = document.createElement('span')
+        chip.className = 'chip'; chip.textContent = '#' + t
+        chip.onclick = () => pick({ kind: 'tag', tag: t })
+        meta.appendChild(chip)
+      }
+
+      // 본문의 #태그는 색만 입히고, 클릭은 칩으로 통일
+      const body = el.querySelector<HTMLElement>('.body')!
+      for (const piece of splitByTags(e.body)) {
+        if (piece.type === 'text') {
+          body.appendChild(document.createTextNode(piece.value))
+        } else {
+          const span = document.createElement('span')
+          span.className = 'intag'; span.textContent = '#' + piece.value
+          body.appendChild(span)
         }
-        el.appendChild(box)
       }
       tl.appendChild(el)
     }
