@@ -51,6 +51,10 @@ export function dayRange(year: number, month: number, day: number): { from: stri
   }
 }
 
+export function daysAgo(days: number, now: Date): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+}
+
 export function latestMonth(tree: YearNode[]): YearMonth | null {
   const lastYear = tree[tree.length - 1]
   if (!lastYear) return null

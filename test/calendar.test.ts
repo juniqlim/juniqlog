@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { treeOf, monthRange, dayRange, latestMonth } from '../src/calendar'
+import { treeOf, monthRange, dayRange, latestMonth, daysAgo } from '../src/calendar'
+
+
+describe('daysAgo', () => {
+  it('기준 시각에서 그만큼 뺀 시각을 낸다', () => {
+    const now = new Date('2026-07-24T10:00:00Z')
+
+    expect(daysAgo(7, now)).toBe(new Date('2026-07-17T10:00:00Z').toISOString())
+  })
+
+  it('달을 넘어가도 맞는다', () => {
+    const now = new Date('2026-08-03T00:00:00Z')
+
+    expect(daysAgo(7, now)).toBe(new Date('2026-07-27T00:00:00Z').toISOString())
+  })
+})
 
 
 describe('treeOf', () => {

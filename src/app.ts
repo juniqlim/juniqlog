@@ -1,7 +1,10 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
 import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
-import { treeOf, monthRange, dayRange, latestMonth, type YearNode } from './calendar'
+import { treeOf, monthRange, dayRange, latestMonth, daysAgo, type YearNode } from './calendar'
+
+/** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
+const TRASH_DAYS = 7
 import { extractTags, parseLines, type Piece } from './tags'
 import { isSearchable, searchPattern } from './search'
 
@@ -16,6 +19,7 @@ type View =
   | { kind: 'day'; year: number; month: number; day: number }
   | { kind: 'tag'; tag: string }
   | { kind: 'search'; q: string }
+  | { kind: 'trash' }
 
 const TABS = [
   { id: 'date', label: '날짜' },
@@ -29,6 +33,7 @@ let tree: YearNode[] = []
 let tags: TagCount[] = []
 let view: View | null = null
 let tab: TabId = 'date'
+let trashCount = 0
 let openYears = new Set<number>()
 let openMonths = new Set<string>()
 let channel: ReturnType<typeof sb.channel> | null = null
@@ -93,6 +98,11 @@ async function loadIndex() {
   const { data, error } = await sb.from('entries')
     .select('created_at, tags').is('deleted_at', null)
   if (error) { console.error(error); return }
+  const { count } = await sb.from('entries')
+    .select('id', { count: 'exact', head: true })
+    .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
+  trashCount = count ?? 0
+
   const rows = data ?? []
   tree = treeOf(rows.map(r => r.created_at as string))
   tags = tagsOf(rows.map(r => ({ tags: (r.tags ?? []) as string[] })))
@@ -105,6 +115,17 @@ async function loadIndex() {
 
 async function loadEntries() {
   if (!view) view = thisMonth()
+
+  if (view.kind === 'trash') {
+    const { data, error } = await sb.from('entries')
+      .select('*')
+      .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
+      .order('deleted_at', { ascending: false })
+    if (error) { console.error(error); return }
+    entries = (data ?? []) as LogEntry[]
+    return
+  }
+
   let q = sb.from('entries').select('*').is('deleted_at', null)
   if (view.kind === 'month') {
     const { from, to } = monthRange(view.year, view.month)
@@ -160,6 +181,20 @@ async function saveEdit(entry: LogEntry, body: string) {
   await refresh()
 }
 
+async function restoreEntry(entry: LogEntry) {
+  const { error } = await sb.from('entries')
+    .update({ deleted_at: null }).eq('id', entry.id)
+  if (error) { console.error(error); return }
+  await refresh()
+}
+
+async function purgeEntry(entry: LogEntry) {
+  if (!confirm('완전히 지웁니다. 되돌릴 수 없습니다.')) return
+  const { error } = await sb.from('entries').delete().eq('id', entry.id)
+  if (error) { console.error(error); return }
+  await refresh()
+}
+
 async function removeEntry(entry: LogEntry) {
   if (!confirm('이 로그를 지울까요? (데이터는 남습니다)')) return
   const { error } = await sb.from('entries')
@@ -203,6 +238,12 @@ function renderSidebar() {
   else if (tab === 'tag') renderTagList(list)
   else renderSearchBox(list)
   el.appendChild(list)
+
+  const trash = document.createElement('button')
+  trash.className = 'trash' + (view?.kind === 'trash' ? ' on' : '')
+  trash.innerHTML = `<span>휴지통</span><span class="cnt">${trashCount}</span>`
+  trash.onclick = () => pick({ kind: 'trash' })
+  el.appendChild(trash)
 }
 
 function renderSearchBox(box: HTMLElement) {
@@ -354,7 +395,14 @@ function renderHeading() {
   if (!view) { fb.hidden = true; return }
   fb.hidden = false
   const pad = (n: number) => String(n).padStart(2, '0')
-  if (view.kind === 'search') {
+  if (view.kind === 'trash') {
+    fb.textContent = ''
+    fb.append(`휴지통 · 최근 ${TRASH_DAYS}일 · ${entries.length}건 · `)
+    const back = document.createElement('a')
+    back.textContent = '이번 달로'
+    back.onclick = () => pick(thisMonth())
+    fb.appendChild(back)
+  } else if (view.kind === 'search') {
     fb.textContent = ''
     fb.append(`검색 “${view.q}” · ${entries.length}건 · `)
     const back = document.createElement('a')
@@ -377,13 +425,15 @@ function renderTimeline() {
   const tl = $('timeline')
   tl.innerHTML = ''
   if (entries.length === 0) {
-    const msg = view?.kind === 'search' ? '찾는 로그가 없습니다'
+    const msg = view?.kind === 'trash' ? '휴지통이 비었습니다'
+      : view?.kind === 'search' ? '찾는 로그가 없습니다'
       : view?.kind === 'tag' ? '이 태그의 로그가 없습니다'
       : '이 기간에 로그가 없습니다'
     tl.innerHTML = `<div class="empty">${msg}</div>`
     return
   }
 
+  const inTrash = view?.kind === 'trash'
   for (const group of groupByDate(entries)) {
     const head = document.createElement('div')
     head.className = 'datehead'; head.textContent = group.date
@@ -394,17 +444,24 @@ function renderTimeline() {
       el.className = 'entry'
       el.innerHTML = `<div class="head">
           <span class="meta"><span class="time">${timeOf(e.created_at)}</span></span>
-          <span class="actions">
-            <button class="act edit" title="수정">✎</button>
-            <button class="act tag" title="태그 달기">＃</button>
-            <button class="act del" title="삭제">×</button>
+          <span class="actions">${inTrash
+            ? `<button class="act back" title="복원">↩</button>
+               <button class="act purge" title="완전 삭제">×</button>`
+            : `<button class="act edit" title="수정">✎</button>
+               <button class="act tag" title="태그 달기">＃</button>
+               <button class="act del" title="삭제">×</button>`}
           </span>
         </div>
         <div class="body"></div>`
-      el.querySelector<HTMLElement>('.del')!.onclick = () => removeEntry(e)
-      el.querySelector<HTMLElement>('.tag')!.onclick = () => {
-        const t = prompt('태그')?.trim()
-        if (t) addTag(e, t)
+      if (inTrash) {
+        el.querySelector<HTMLElement>('.back')!.onclick = () => restoreEntry(e)
+        el.querySelector<HTMLElement>('.purge')!.onclick = () => purgeEntry(e)
+      } else {
+        el.querySelector<HTMLElement>('.del')!.onclick = () => removeEntry(e)
+        el.querySelector<HTMLElement>('.tag')!.onclick = () => {
+          const t = prompt('태그')?.trim()
+          if (t) addTag(e, t)
+        }
       }
 
       // 태그 칩은 시분초 옆에 (본문 아래 줄을 쓰지 않도록)
@@ -418,7 +475,7 @@ function renderTimeline() {
 
       const box = el.querySelector<HTMLElement>('.body')!
       renderBody(box, e.body)
-      el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
+      if (!inTrash) el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
       tl.appendChild(el)
     }
   }
