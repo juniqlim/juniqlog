@@ -3,6 +3,7 @@ import { addTag as withTag } from './entry'
 import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
 import { treeOf, monthRange, dayRange, latestMonth, type YearNode } from './calendar'
 import { extractTags, parseLines, type Piece } from './tags'
+import { isSearchable, searchPattern } from './search'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -14,10 +15,12 @@ type View =
   | { kind: 'month'; year: number; month: number }
   | { kind: 'day'; year: number; month: number; day: number }
   | { kind: 'tag'; tag: string }
+  | { kind: 'search'; q: string }
 
 const TABS = [
   { id: 'date', label: '날짜' },
   { id: 'tag', label: '태그' },
+  { id: 'search', label: '검색' },
 ] as const
 type TabId = (typeof TABS)[number]['id']
 
@@ -97,7 +100,7 @@ async function loadIndex() {
     const latest = latestMonth(tree)
     view = latest ? { kind: 'month', ...latest } : thisMonth()
   }
-  if (view.kind !== 'tag') openYears.add(view.year)
+  if (view.kind === 'month' || view.kind === 'day') openYears.add(view.year)
 }
 
 async function loadEntries() {
@@ -109,6 +112,8 @@ async function loadEntries() {
   } else if (view.kind === 'day') {
     const { from, to } = dayRange(view.year, view.month, view.day)
     q = q.gte('created_at', from).lt('created_at', to)
+  } else if (view.kind === 'search') {
+    q = q.ilike('body', searchPattern(view.q))
   } else {
     q = q.contains('tags', [view.tag])
   }
@@ -144,6 +149,14 @@ async function addTag(entry: LogEntry, tag: string) {
   if (tagged.tags.length === entry.tags.length) return
   const { error } = await sb.from('entries').update({ tags: tagged.tags }).eq('id', entry.id)
   if (error) { console.error(error); return }
+  await refresh()
+}
+
+async function saveEdit(entry: LogEntry, body: string) {
+  if (body.trim() === '' || body === entry.body) return
+  const { error } = await sb.from('entries')
+    .update({ body, tags: extractTags(body) }).eq('id', entry.id)
+  if (error) { console.error(error); alert('수정 실패: ' + error.message); return }
   await refresh()
 }
 
@@ -187,8 +200,28 @@ function renderSidebar() {
 
   const list = document.createElement('div')
   if (tab === 'date') renderDateTree(list)
-  else renderTagList(list)
+  else if (tab === 'tag') renderTagList(list)
+  else renderSearchBox(list)
   el.appendChild(list)
+}
+
+function renderSearchBox(box: HTMLElement) {
+  const input = document.createElement('input')
+  input.className = 'find'
+  input.placeholder = '검색어'
+  input.value = view?.kind === 'search' ? view.q : ''
+  input.onkeydown = e => {
+    if (e.key !== 'Enter') return
+    const q = input.value
+    if (isSearchable(q)) pick({ kind: 'search', q })
+  }
+  box.appendChild(input)
+
+  const hint = document.createElement('div')
+  hint.className = 'empty'
+  hint.textContent = '전체 기간에서 본문을 찾습니다'
+  box.appendChild(hint)
+  setTimeout(() => input.focus(), 0)
 }
 
 function renderDateTree(box: HTMLElement) {
@@ -274,6 +307,25 @@ function pieceNode(piece: Piece): Node {
   return el
 }
 
+/** 본문 자리에서 바로 고친다 — Enter 저장, Esc 취소 */
+function startEdit(box: HTMLElement, entry: LogEntry) {
+  box.textContent = ''
+  const ta = document.createElement('textarea')
+  ta.className = 'editing'
+  ta.value = entry.body
+  box.appendChild(ta)
+
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px' }
+  ta.addEventListener('input', fit)
+  fit(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length)
+
+  const cancel = () => { box.textContent = ''; renderBody(box, entry.body) }
+  ta.onkeydown = e => {
+    if (e.key === 'Escape') { e.preventDefault(); cancel() }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(entry, ta.value) }
+  }
+}
+
 function renderBody(box: HTMLElement, body: string) {
   for (const line of parseLines(body)) {
     const row = document.createElement('div')
@@ -302,7 +354,14 @@ function renderHeading() {
   if (!view) { fb.hidden = true; return }
   fb.hidden = false
   const pad = (n: number) => String(n).padStart(2, '0')
-  if (view.kind === 'tag') {
+  if (view.kind === 'search') {
+    fb.textContent = ''
+    fb.append(`검색 “${view.q}” · ${entries.length}건 · `)
+    const back = document.createElement('a')
+    back.textContent = '이번 달로'
+    back.onclick = () => pick(thisMonth())
+    fb.appendChild(back)
+  } else if (view.kind === 'tag') {
     fb.innerHTML = `태그 <b>#${view.tag}</b> 모아보기 · <a id="back">이번 달로</a>`
     fb.querySelector<HTMLElement>('#back')!.onclick = () => pick(thisMonth())
   } else if (view.kind === 'day') {
@@ -318,7 +377,10 @@ function renderTimeline() {
   const tl = $('timeline')
   tl.innerHTML = ''
   if (entries.length === 0) {
-    tl.innerHTML = '<div class="empty">이 기간에 로그가 없습니다</div>'
+    const msg = view?.kind === 'search' ? '찾는 로그가 없습니다'
+      : view?.kind === 'tag' ? '이 태그의 로그가 없습니다'
+      : '이 기간에 로그가 없습니다'
+    tl.innerHTML = `<div class="empty">${msg}</div>`
     return
   }
 
@@ -333,6 +395,7 @@ function renderTimeline() {
       el.innerHTML = `<div class="head">
           <span class="meta"><span class="time">${timeOf(e.created_at)}</span></span>
           <span class="actions">
+            <button class="act edit" title="수정">✎</button>
             <button class="act tag" title="태그 달기">＃</button>
             <button class="act del" title="삭제">×</button>
           </span>
@@ -353,7 +416,9 @@ function renderTimeline() {
         meta.appendChild(chip)
       }
 
-      renderBody(el.querySelector<HTMLElement>('.body')!, e.body)
+      const box = el.querySelector<HTMLElement>('.body')!
+      renderBody(box, e.body)
+      el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
       tl.appendChild(el)
     }
   }
