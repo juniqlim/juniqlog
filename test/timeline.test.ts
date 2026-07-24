@@ -59,6 +59,19 @@ describe('groupByDate', () => {
     expect(groups[1].entries.map(e => e.id)).toEqual(['3'])
   })
 
+  it('오래된 것부터 오면 그 순서 그대로 묶는다', () => {
+    const list = [
+      { id: '1', body: 'a', created_at: '2026-07-23T09:00:00', tags: [], deleted_at: null },
+      { id: '2', body: 'b', created_at: '2026-07-24T09:00:00', tags: [], deleted_at: null },
+      { id: '3', body: 'c', created_at: '2026-07-24T14:00:00', tags: [], deleted_at: null },
+    ]
+
+    const groups = groupByDate(list)
+
+    expect(groups.map(g => g.date)).toEqual(['2026. 07. 23. (목)', '2026. 07. 24. (금)'])
+    expect(groups[1].entries.map(e => e.id)).toEqual(['2', '3'])
+  })
+
   it('빈 목록은 빈 그룹을 낸다', () => {
     expect(groupByDate([])).toEqual([])
   })

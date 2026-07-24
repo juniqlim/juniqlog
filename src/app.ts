@@ -65,10 +65,15 @@ async function load() {
   const { data, error } = await sb.from('entries')
     .select('*')
     .is('deleted_at', null)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
   if (error) { console.error(error); return }
   entries = (data ?? []) as LogEntry[]
   render()
+  scrollToLatest()
+}
+
+function scrollToLatest() {
+  window.scrollTo({ top: document.body.scrollHeight })
 }
 
 async function submit() {
