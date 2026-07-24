@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto'
-
 export interface Entry {
   id: string
   body: string
@@ -13,14 +11,14 @@ export function createEntry(body: string, now: Date, tags: string[] = []): Entry
   }
 
   return {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     body,
     createdAt: now,
     tags: [...tags],
   }
 }
 
-export function addTag(entry: Entry, tag: string): Entry {
+export function addTag<T extends { tags: string[] }>(entry: T, tag: string): T {
   if (entry.tags.includes(tag)) {
     return entry
   }
