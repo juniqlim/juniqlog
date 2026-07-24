@@ -85,9 +85,28 @@ function dateOf(iso) {
 function showAuth() { $('auth').hidden = false; $('app').hidden = true }
 function showApp()  { $('auth').hidden = true;  $('app').hidden = false }
 
+let channel = null
+
+function subscribe(token) {
+  if (channel) return
+  sb.realtime.setAuth(token)
+  channel = sb.channel('entries-sync')
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'entries' },
+        () => load())
+    .subscribe()
+}
+
+function unsubscribe() {
+  if (!channel) return
+  sb.removeChannel(channel)
+  channel = null
+}
+
 async function refreshAuth() {
   const { data: { session } } = await sb.auth.getSession()
-  if (session) { showApp(); await load() } else { showAuth() }
+  if (session) { showApp(); await load(); subscribe(session.access_token) }
+  else { unsubscribe(); showAuth() }
 }
 sb.auth.onAuthStateChange(() => refreshAuth())
 
