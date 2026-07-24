@@ -120,26 +120,32 @@ function render() {
     for (const e of group.entries) {
       const el = document.createElement('div')
       el.className = 'entry'
-      el.innerHTML = `<div class="head"><span class="time">${timeOf(e.created_at)}</span>
-        <button class="del" title="삭제">×</button></div>
-        <div class="body"></div><div class="tags"></div>`
+      el.innerHTML = `<div class="head">
+          <span class="time">${timeOf(e.created_at)}</span>
+          <span class="actions">
+            <button class="act tag" title="태그 달기">＃</button>
+            <button class="act del" title="삭제">×</button>
+          </span>
+        </div>
+        <div class="body"></div>`
       el.querySelector<HTMLElement>('.body')!.textContent = e.body
       el.querySelector<HTMLElement>('.del')!.onclick = () => removeEntry(e)
-
-      const tags = el.querySelector('.tags')!
-      for (const t of e.tags) {
-        const chip = document.createElement('span')
-        chip.className = 'chip'; chip.textContent = '#' + t
-        chip.onclick = () => { filterTag = t; render() }
-        tags.appendChild(chip)
-      }
-      const add = document.createElement('span')
-      add.className = 'chip add'; add.textContent = '+태그'
-      add.onclick = () => {
+      el.querySelector<HTMLElement>('.tag')!.onclick = () => {
         const t = prompt('태그')?.trim()
         if (t) addTag(e, t)
       }
-      tags.appendChild(add)
+
+      if (e.tags.length > 0) {
+        const tags = document.createElement('div')
+        tags.className = 'tags'
+        for (const t of e.tags) {
+          const chip = document.createElement('span')
+          chip.className = 'chip'; chip.textContent = '#' + t
+          chip.onclick = () => { filterTag = t; render() }
+          tags.appendChild(chip)
+        }
+        el.appendChild(tags)
+      }
       tl.appendChild(el)
     }
   }
