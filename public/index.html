@@ -34,6 +34,8 @@
                 border-radius:10px; padding:11px; font:inherit; margin-bottom:10px; }
   #auth button { width:100%; background:#6ea8fe; color:#0f1115; border:0; border-radius:10px; padding:11px; font-weight:600; cursor:pointer; }
   #auth .msg { margin-top:12px; font-size:13px; color:#9fb4d6; min-height:18px; }
+  #auth button.google { background:#fff; color:#1f2328; margin-bottom:14px; }
+  #auth .or { color:#6b7484; font-size:12px; margin-bottom:14px; }
 </style>
 </head>
 <body>
@@ -41,6 +43,8 @@
 <div id="auth" hidden>
   <h1>juniqlog</h1>
   <p>이메일로 로그인 링크를 받습니다. 최초 1회면 이후 로그인 상태가 유지됩니다.</p>
+  <button id="google" class="google">Google로 로그인</button>
+  <div class="or">또는</div>
   <input id="email" type="email" placeholder="이메일" autocomplete="email">
   <button id="login">로그인 링크 받기</button>
   <div class="msg" id="authmsg"></div>
@@ -120,6 +124,13 @@ $('login').onclick = async () => {
   })
   $('authmsg').textContent = error ? ('오류: ' + error.message)
     : '메일함을 확인해 링크를 누르세요.'
+}
+$('google').onclick = async () => {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname }
+  })
+  if (error) $('authmsg').textContent = '오류: ' + error.message
 }
 $('logout').onclick = async () => { await sb.auth.signOut() }
 
