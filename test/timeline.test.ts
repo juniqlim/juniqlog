@@ -1,5 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { timeOf, dateOf, groupByDate, visible, byTag } from '../src/timeline'
+import { timeOf, dateOf, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
+
+
+describe('tagsOf', () => {
+  it('태그를 세어 많이 쓴 순으로 낸다', () => {
+    const rows = [{ tags: ['투자', '일상'] }, { tags: ['투자'] }, { tags: [] }]
+
+    expect(tagsOf(rows)).toEqual([
+      { tag: '투자', count: 2 },
+      { tag: '일상', count: 1 },
+    ])
+  })
+
+  it('같은 수면 이름순으로 낸다', () => {
+    const rows = [{ tags: ['b'] }, { tags: ['a'] }]
+
+    expect(tagsOf(rows)).toEqual([
+      { tag: 'a', count: 1 },
+      { tag: 'b', count: 1 },
+    ])
+  })
+
+  it('태그가 없으면 빈 목록', () => {
+    expect(tagsOf([])).toEqual([])
+  })
+})
 
 
 describe('timeOf', () => {

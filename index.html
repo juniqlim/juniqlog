@@ -35,6 +35,27 @@
   button.send { background:#6ea8fe; color:#0f1115; border:0; border-radius:10px; padding:0 16px; font-weight:600; cursor:pointer; }
   .filter { max-width:720px; margin:8px auto 0; padding:0 16px; font-size:13px; color:#8b93a3; }
   .filter b { color:#9fb4d6; } .filter a { color:#6ea8fe; cursor:pointer; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  #menu { background:none; border:0; color:#9fb4d6; font-size:18px; cursor:pointer; padding:0; }
+  #sidebar { position:fixed; top:0; left:0; bottom:0; width:190px; z-index:20;
+             background:#141720; border-right:1px solid #262b36; padding:14px 8px;
+             overflow-y:auto; }
+  #backdrop { position:fixed; inset:0; background:#0008; z-index:10; }
+  .yr, .mo { display:flex; align-items:center; gap:8px; width:100%; background:none; border:0;
+             color:#e6e8ec; font:inherit; cursor:pointer; padding:5px 8px; border-radius:7px; text-align:left; }
+  .yr:hover, .mo:hover { background:#1e222c; }
+  .mo { padding-left:26px; color:#9aa3b2; font-size:14px; }
+  .mo.on { background:#233047; color:#9fb4d6; }
+  .tabs { display:flex; gap:4px; margin-bottom:10px; }
+  .tab { flex:1; background:none; border:0; color:#6b7484; font:inherit; font-size:13px;
+         cursor:pointer; padding:6px 0; border-radius:7px; }
+  .tab.on { background:#233047; color:#9fb4d6; font-weight:600; }
+  .yr.on { background:#233047; color:#9fb4d6; }
+  .cnt { margin-left:auto; color:#6b7484; font-size:12px; }
+  .empty { color:#6b7484; font-size:13px; padding:12px 8px; text-align:center; }
+  .caret { color:#6b7484; font-size:11px; width:10px; }
+  .sq { width:13px; height:13px; border-radius:3px; background:#ef6a5c; flex:none; }
+  .mo .sq { background:#3aa0c9; }
   #auth { max-width:360px; margin:18vh auto; padding:24px; text-align:center; }
   #auth h1 { font-size:22px; margin:0 0 4px; }
   #auth p { color:#8b93a3; font-size:13px; margin:0 0 18px; }
@@ -59,7 +80,12 @@
 </div>
 
 <div id="app" hidden>
-  <header>juniqlog <button class="out" id="logout">로그아웃</button></header>
+  <header>
+    <span class="brand"><button id="menu" title="목록">☰</button> juniqlog</span>
+    <button class="out" id="logout">로그아웃</button>
+  </header>
+  <div id="sidebar" hidden></div>
+  <div id="backdrop" hidden></div>
   <div class="filter" id="filter" hidden></div>
   <div id="timeline"></div>
   <div id="composer">
