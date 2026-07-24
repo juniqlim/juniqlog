@@ -12,6 +12,10 @@
   #timeline { max-width:720px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
   .entry { background:#181b22; border:1px solid #262b36; border-radius:10px; padding:10px 12px; }
   .time { font-size:12px; color:#8b93a3; }
+  .head { display:flex; justify-content:space-between; align-items:center; }
+  .del { background:none; border:0; font-size:16px; line-height:1;
+         color:#414958; cursor:pointer; padding:0 2px; }
+  .entry:hover .del { color:#8b93a3; }
   .datehead { max-width:720px; margin:14px auto 2px; padding:0 4px; font-size:13px;
               font-weight:600; color:#9fb4d6; border-bottom:1px solid #262b36; }
   .datehead:first-child { margin-top:0; }
@@ -137,10 +141,20 @@ $('logout').onclick = async () => { await sb.auth.signOut() }
 /* ---- data ---- */
 async function load() {
   const { data, error } = await sb.from('entries')
-    .select('*').order('created_at', { ascending: false })
+    .select('*')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
   if (error) { console.error(error); return }
   entries = data || []
   render()
+}
+
+async function removeEntry(entry) {
+  if (!confirm('이 로그를 지울까요? (데이터는 남습니다)')) return
+  const { error } = await sb.from('entries')
+    .update({ deleted_at: new Date().toISOString() }).eq('id', entry.id)
+  if (error) { console.error(error); return }
+  await load()
 }
 
 async function submit() {
@@ -183,8 +197,10 @@ function render() {
     }
     const el = document.createElement('div')
     el.className = 'entry'
-    el.innerHTML = `<div class="time">${timeOf(e.created_at)}</div>
+    el.innerHTML = `<div class="head"><span class="time">${timeOf(e.created_at)}</span>
+      <button class="del" title="삭제">×</button></div>
       <div class="body"></div><div class="tags"></div>`
+    el.querySelector('.del').onclick = () => removeEntry(e)
     el.querySelector('.body').textContent = e.body
     const tags = el.querySelector('.tags')
     for (const t of e.tags) {
