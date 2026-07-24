@@ -12,6 +12,9 @@
   #timeline { max-width:720px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
   .entry { background:#181b22; border:1px solid #262b36; border-radius:10px; padding:10px 12px; }
   .time { font-size:12px; color:#8b93a3; }
+  .datehead { max-width:720px; margin:14px auto 2px; padding:0 4px; font-size:13px;
+              font-weight:600; color:#9fb4d6; border-bottom:1px solid #262b36; }
+  .datehead:first-child { margin-top:0; }
   .body { white-space:pre-wrap; word-break:break-word; margin:2px 0 6px; }
   .tags { display:flex; flex-wrap:wrap; gap:6px; }
   .chip { font-size:12px; background:#232833; border:1px solid #313846; color:#9fb4d6;
@@ -51,11 +54,17 @@ function createEntry(body, tags = []) {
   return { id: uid(), body, createdAt: new Date().toISOString(), tags: [...tags] }
 }
 
-function fmt(iso) {
+const p = n => String(n).padStart(2,'0')
+
+function timeOf(iso) {
   const d = new Date(iso)
-  const p = n => String(n).padStart(2,'0')
-  return `${d.getFullYear()}. ${p(d.getMonth()+1)}. ${p(d.getDate())}. ` +
-         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function dateOf(iso) {
+  const d = new Date(iso)
+  const days = ['일','월','화','수','목','금','토']
+  return `${d.getFullYear()}. ${p(d.getMonth()+1)}. ${p(d.getDate())}. (${days[d.getDay()]})`
 }
 
 function render() {
@@ -72,10 +81,18 @@ function render() {
     .sort((a,b) => b.createdAt.localeCompare(a.createdAt))
 
   tl.innerHTML = ''
+  let curDate = null
   for (const e of list) {
+    const d = dateOf(e.createdAt)
+    if (d !== curDate) {
+      curDate = d
+      const h = document.createElement('div')
+      h.className = 'datehead'; h.textContent = d
+      tl.appendChild(h)
+    }
     const el = document.createElement('div')
     el.className = 'entry'
-    el.innerHTML = `<div class="time">${fmt(e.createdAt)}</div>
+    el.innerHTML = `<div class="time">${timeOf(e.createdAt)}</div>
       <div class="body"></div><div class="tags"></div>`
     el.querySelector('.body').textContent = e.body
     const tags = el.querySelector('.tags')
