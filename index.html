@@ -26,7 +26,14 @@
   .datehead { max-width:720px; margin:14px auto 2px; padding:0 4px; font-size:13px;
               font-weight:600; color:#9fb4d6; border-bottom:1px solid #262b36; }
   .datehead:first-child { margin-top:0; }
-  .body { white-space:pre-wrap; word-break:break-word; margin:2px 0 6px; }
+  .body { word-break:break-word; margin:2px 0 6px; }
+  .ln { white-space:pre-wrap; min-height:1.6em; }
+  .ln.bullet, .ln.number { display:flex; gap:7px; padding-left:4px; }
+  .marker { color:#7d8697; flex:none; min-width:14px; }
+  .body code { background:#232833; border:1px solid #313846; border-radius:5px;
+               padding:0 5px; font-size:13px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .body s { color:#7d8697; }
+  .link { color:#6ea8fe; }
   .tags { display:flex; flex-wrap:wrap; gap:6px; }
   .chip { font-size:12px; background:#232833; border:1px solid #313846; color:#9fb4d6;
           border-radius:999px; padding:1px 9px; cursor:pointer; }

@@ -2,7 +2,7 @@ import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
 import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
 import { treeOf, monthRange, dayRange, latestMonth, type YearNode } from './calendar'
-import { extractTags, splitByTags } from './tags'
+import { extractTags, parseLines, type Piece } from './tags'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -256,6 +256,40 @@ function renderTagList(box: HTMLElement) {
   }
 }
 
+/** 조각을 DOM으로 — innerHTML을 쓰지 않아 본문이 HTML로 해석될 여지가 없다 */
+function pieceNode(piece: Piece): Node {
+  if (piece.type === 'text') return document.createTextNode(piece.value)
+
+  if (piece.type === 'link') {
+    const a = document.createElement('a')
+    a.className = 'link'; a.href = piece.value; a.textContent = piece.value
+    a.target = '_blank'; a.rel = 'noopener noreferrer'
+    return a
+  }
+
+  const tag = { bold: 'strong', italic: 'em', code: 'code', strike: 's', tag: 'span' }[piece.type]
+  const el = document.createElement(tag)
+  if (piece.type === 'tag') { el.className = 'intag'; el.textContent = '#' + piece.value }
+  else el.textContent = piece.value
+  return el
+}
+
+function renderBody(box: HTMLElement, body: string) {
+  for (const line of parseLines(body)) {
+    const row = document.createElement('div')
+    row.className = 'ln ' + line.kind
+    if (line.marker !== '') {
+      const mk = document.createElement('span')
+      mk.className = 'marker'; mk.textContent = line.marker
+      row.appendChild(mk)
+    }
+    const content = document.createElement('span')
+    for (const piece of line.pieces) content.appendChild(pieceNode(piece))
+    row.appendChild(content)
+    box.appendChild(row)
+  }
+}
+
 /* ---- timeline ---- */
 function renderAll() {
   renderSidebar()
@@ -319,17 +353,7 @@ function renderTimeline() {
         meta.appendChild(chip)
       }
 
-      // 본문의 #태그는 색만 입히고, 클릭은 칩으로 통일
-      const body = el.querySelector<HTMLElement>('.body')!
-      for (const piece of splitByTags(e.body)) {
-        if (piece.type === 'text') {
-          body.appendChild(document.createTextNode(piece.value))
-        } else {
-          const span = document.createElement('span')
-          span.className = 'intag'; span.textContent = '#' + piece.value
-          body.appendChild(span)
-        }
-      }
+      renderBody(el.querySelector<HTMLElement>('.body')!, e.body)
       tl.appendChild(el)
     }
   }
