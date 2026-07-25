@@ -93,6 +93,11 @@
   #auth button.google { background:#fff; color:#1f2328; margin-bottom:14px; }
   #auth .or { color:#6b7484; font-size:12px; margin-bottom:14px; }
   #auth .msg { margin-top:12px; font-size:13px; color:#9fb4d6; min-height:18px; }
+
+  /* iOS 사파리는 입력 글자가 16px 미만이면 포커스할 때 화면을 확대한다.
+     확대되면 뷰포트가 어긋나 좌우로 스크롤해야 하고 앱 느낌이 깨진다.
+     user-scalable=no 는 iOS 가 무시하므로 16px 이 유일한 해법이다. */
+  textarea, .editing, .find, #auth input { font-size:16px; }
 </style>
 </head>
 <body>
