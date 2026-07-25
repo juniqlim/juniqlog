@@ -211,6 +211,47 @@ describe('memoryStore — 전량', () => {
   })
 })
 
+describe('memoryStore — 되읽기', () => {
+  const item = {
+    id: '옛것', at: '2026-05-01T03:00:00.000Z', edited: null,
+    tags: ['산책'], body: '걸었다', meta: '{"dev":"iPhone"}',
+  }
+
+  it('쓴 시각을 살려서 넣는다 — 넣은 시각으로 덮으면 백업이 아니다', async () => {
+    const { store } = make()
+    await store.insertMany([item])
+
+    const [got] = await store.all()
+    expect(got.created_at).toBe('2026-05-01T03:00:00.000Z')
+    expect(got.updated_at).toBe('2026-05-01T03:00:00.000Z')
+  })
+
+  it('본문·태그·정황을 그대로 옮긴다', async () => {
+    const { store } = make()
+    await store.insertMany([item])
+
+    const [got] = await store.all()
+    expect(got.body).toBe('걸었다')
+    expect(got.tags).toEqual(['산책'])
+    expect(got.meta).toBe('{"dev":"iPhone"}')
+  })
+
+  it('고친 적이 있으면 그 시각도 살린다', async () => {
+    const { store } = make()
+    await store.insertMany([{ ...item, edited: '2026-05-02T03:00:00.000Z' }])
+
+    expect((await store.all())[0].updated_at).toBe('2026-05-02T03:00:00.000Z')
+  })
+
+  it('넣고 나면 지켜보던 쪽이 안다', async () => {
+    const { store } = make()
+    let told = 0
+    store.watch(() => { told++ })
+    await store.insertMany([item])
+    expect(told).toBe(1)
+  })
+})
+
 describe('memoryStore — 바뀔 때 알린다', () => {
   it('쓰면 지켜보던 쪽이 안다', async () => {
     const { store } = make()

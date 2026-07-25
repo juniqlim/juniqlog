@@ -10,7 +10,8 @@ import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
 import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
-import { buildBackup, deliver } from './backup'
+import { buildBackup, deliver, readBackup } from './backup'
+import { plan } from './import'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 
@@ -272,6 +273,46 @@ async function exportAll(btn: HTMLButtonElement) {
   }
 }
 
+/** 파일을 고르게 하고, 이미 있는 것은 빼고 넣는다 */
+function pickBackup(btn: HTMLButtonElement) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.zip,.json,application/zip,application/json'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (file === undefined) return
+    await importFrom(file, btn)
+  }
+  input.click()
+}
+
+async function importFrom(file: File, btn: HTMLButtonElement) {
+  const mark = btn.textContent
+  btn.disabled = true
+  btn.textContent = '읽는 중…'
+  try {
+    const incoming = await readBackup(new Uint8Array(await file.arrayBuffer()))
+    const { fresh, skipped } = plan(await store.all(), incoming)
+
+    if (fresh.length === 0) {
+      alert(`새로 가져올 것이 없습니다 (${skipped}건은 이미 있습니다)`)
+      return
+    }
+    if (!confirm(`${fresh.length}건을 가져옵니다. (${skipped}건은 이미 있습니다)`)) return
+
+    await store.insertMany(fresh)
+    await loadIndex()
+    await refresh()
+    alert(`${fresh.length}건을 가져왔습니다`)
+  } catch (e) {
+    console.error(e)
+    alert(e instanceof Error ? e.message : '가져오지 못했습니다')
+  } finally {
+    btn.disabled = false
+    btn.textContent = mark
+  }
+}
+
 const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry), btn)
 const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list), btn)
 
@@ -322,6 +363,12 @@ function renderSidebar() {
   save.textContent = '내보내기'
   save.onclick = () => exportAll(save)
   el.appendChild(save)
+
+  const load = document.createElement('button')
+  load.className = 'trash out'
+  load.textContent = '가져오기'
+  load.onclick = () => pickBackup(load)
+  el.appendChild(load)
 
   // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
   const out = document.createElement('button')

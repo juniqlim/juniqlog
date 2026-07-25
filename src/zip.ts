@@ -71,6 +71,59 @@ export function zip(files: ZipFile[], at: Date): Uint8Array {
   return join([...parts, ...central, end])
 }
 
+/**
+ * 되읽는다. 우리가 낸 무압축뿐 아니라 줄인 것(deflate)도 푼다 —
+ * 파인더나 다른 도구를 거치면 다시 묶여 오기 때문이다.
+ */
+export async function unzip(bytes: Uint8Array): Promise<ZipFile[]> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const end = findEnd(view)
+  if (end < 0) throw new Error('zip 파일이 아닙니다')
+
+  const count = view.getUint16(end + 10, true)
+  const decoder = new TextDecoder()
+  const files: ZipFile[] = []
+
+  let at = view.getUint32(end + 16, true)
+  for (let i = 0; i < count; i++) {
+    if (view.getUint32(at, true) !== 0x02014b50) throw new Error('목록이 깨졌습니다')
+
+    const method = view.getUint16(at + 10, true)
+    const size = view.getUint32(at + 20, true)
+    const nameLen = view.getUint16(at + 28, true)
+    const extraLen = view.getUint16(at + 30, true)
+    const commentLen = view.getUint16(at + 32, true)
+    const head = view.getUint32(at + 42, true)
+    const name = decoder.decode(bytes.subarray(at + 46, at + 46 + nameLen))
+
+    // 로컬 헤더의 덧붙임 길이는 목록의 것과 다를 수 있다 — 거기서 다시 읽는다
+    const from = head + 30 + view.getUint16(head + 26, true) + view.getUint16(head + 28, true)
+    const raw = bytes.subarray(from, from + size)
+
+    // 폴더 자리를 표시한 항목은 건너뛴다
+    if (!name.endsWith('/')) files.push({ name, body: await inflate(raw, method) })
+    at += 46 + nameLen + extraLen + commentLen
+  }
+  return files
+}
+
+/** 끝맺음 기록은 뒤에 있다. 덧말이 붙었을 수 있어 뒤에서부터 찾는다 */
+function findEnd(view: DataView): number {
+  for (let at = view.byteLength - 22; at >= 0; at--) {
+    if (view.getUint32(at, true) === 0x06054b50) return at
+  }
+  return -1
+}
+
+async function inflate(raw: Uint8Array, method: number): Promise<Uint8Array> {
+  if (method === 0) return raw.slice()
+  if (method !== 8) throw new Error(`풀 수 없는 방식입니다 (${method})`)
+
+  const stream = new Blob([raw as BlobPart]).stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
 const TABLE = buildTable()
 
 export function crc32(bytes: Uint8Array): number {

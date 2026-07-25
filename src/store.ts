@@ -1,4 +1,5 @@
 import type { LogEntry } from './timeline'
+import type { Exported } from './export'
 
 /** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
 export const TRASH_DAYS = 7
@@ -39,6 +40,8 @@ export interface Store {
   all(): Promise<LogEntry[]>
 
   add(body: string, meta: string | null): Promise<void>
+  /** 내보낸 사본을 되돌린다 — 쓴 시각을 살려 넣는다 */
+  insertMany(items: Exported[]): Promise<void>
   edit(id: string, body: string): Promise<void>
   setTags(id: string, tags: string[]): Promise<void>
   trash(id: string): Promise<void>

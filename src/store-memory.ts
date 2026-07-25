@@ -4,6 +4,8 @@ import { TRASH_DAYS } from './store'
 import { extractTags } from './tags'
 import { matches } from './search'
 import { monthRange, dayRange, daysAgo } from './calendar'
+import { metaText } from './import'
+import type { Exported } from './export'
 
 /**
  * 바깥이 없는 저장소. 배열 하나가 전부다.
@@ -97,6 +99,19 @@ export function memoryStore(clock: () => Date = () => new Date()): Store {
         meta,
       })
     },
+    async insertMany(items: Exported[]) {
+      rows = [...rows, ...items.map(item => ({
+        id: crypto.randomUUID(),
+        body: item.body,
+        tags: item.tags,
+        created_at: new Date(item.at).toISOString(),
+        updated_at: new Date(item.edited ?? item.at).toISOString(),
+        deleted_at: null,
+        meta: metaText(item.meta),
+      }))]
+      tell()
+    },
+
     async edit(id: string, body: string) {
       change(id, { body, tags: extractTags(body), updated_at: now() })
     },

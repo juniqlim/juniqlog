@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { crc32, zip } from '../src/zip'
+import { crc32, zip, unzip } from '../src/zip'
 
 const bytes = (s: string) => new TextEncoder().encode(s)
 const at = new Date(2026, 6, 25, 14, 30)
@@ -44,5 +44,28 @@ describe('zip', () => {
     const out = zip([], at)
     expect(out.byteLength).toBe(22)
     expect([...out.slice(0, 4)]).toEqual([0x50, 0x4b, 0x05, 0x06])
+  })
+})
+
+
+describe('unzip', () => {
+  const text = (b: Uint8Array) => new TextDecoder().decode(b)
+
+  it('우리가 묶은 것을 그대로 되돌린다', async () => {
+    const out = await unzip(zip([
+      { name: '2026/07/25.md', body: bytes('걸었다') },
+      { name: 'entries.json', body: bytes('[]') },
+    ], at))
+
+    expect(out.map(f => f.name)).toEqual(['2026/07/25.md', 'entries.json'])
+    expect(text(out[0].body)).toBe('걸었다')
+  })
+
+  it('빈 zip 에서는 아무것도 나오지 않는다', async () => {
+    expect(await unzip(zip([], at))).toEqual([])
+  })
+
+  it('zip 이 아니면 알려준다 — 엉뚱한 파일을 고를 수 있다', async () => {
+    await expect(unzip(bytes('그냥 글'))).rejects.toThrow()
   })
 })

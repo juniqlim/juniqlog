@@ -1,6 +1,7 @@
 import type { LogEntry } from './timeline'
-import { toExported, filesByDay, toJson, fileStamp } from './export'
-import { zip, type ZipFile } from './zip'
+import { toExported, filesByDay, toJson, fileStamp, type Exported } from './export'
+import { zip, unzip, type ZipFile } from './zip'
+import { readEntries } from './import'
 
 /**
  * 폰에서 통째로 받아가는 길.
@@ -26,6 +27,23 @@ export function buildBackup(rows: LogEntry[], homeTz: string, at: Date): Backup 
   files.push({ name: 'entries.json', body: encoder.encode(toJson(items)) })
 
   return { name: `juniqlog-${fileStamp(at)}.zip`, bytes: zip(files, at) }
+}
+
+/**
+ * 되읽는다. zip 이면 그 안의 entries.json 을 꺼낸다 —
+ * 마크다운은 정황이 한 줄로 줄어든 사본이라 되돌릴 게 없다.
+ */
+export async function readBackup(bytes: Uint8Array): Promise<Exported[]> {
+  if (!isZip(bytes)) return readEntries(new TextDecoder().decode(bytes))
+
+  const found = (await unzip(bytes)).find(f => f.name.endsWith('entries.json'))
+  if (found === undefined) throw new Error('이 zip 에는 entries.json 이 없습니다')
+  return readEntries(new TextDecoder().decode(found.body))
+}
+
+/** 'PK' 로 시작한다. 빈 zip 은 끝맺음 기록만 있어 세 번째 바이트가 다르다 */
+function isZip(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x50 && bytes[1] === 0x4b
 }
 
 /**

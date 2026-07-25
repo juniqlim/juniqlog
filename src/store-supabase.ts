@@ -6,6 +6,8 @@ import { extractTags } from './tags'
 import { matches } from './search'
 import { monthRange, dayRange, daysAgo } from './calendar'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
+import { metaText } from './import'
+import type { Exported } from './export'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -22,6 +24,10 @@ export function supabaseStore(): Store {
   let channel: ReturnType<typeof sb.channel> | null = null
 
   const seal = (plain: string) => encrypt(plain, key!)
+  const sealMeta = async (meta: unknown) => {
+    const text = metaText(meta)
+    return text === null ? null : await seal(text)
+  }
 
   /** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
   const unseal = (rows: LogEntry[]) => Promise.all(rows.map(async e => ({
@@ -137,6 +143,23 @@ export function supabaseStore(): Store {
         .insert({ body: await seal(body), tags: extractTags(body), meta: meta && await seal(meta) })
       if (error) throw new Error(error.message)
     },
+    async insertMany(items: Exported[]) {
+      const rows = await Promise.all(items.map(async item => ({
+        body: await seal(item.body),
+        tags: item.tags,
+        created_at: new Date(item.at).toISOString(),
+        // 트리거는 update 에만 걸린다 — 넣을 때는 우리가 적은 값이 남는다
+        updated_at: new Date(item.edited ?? item.at).toISOString(),
+        meta: await sealMeta(item.meta),
+      })))
+
+      // 한 번에 다 보내면 큰 사본에서 요청이 막힌다
+      for (let at = 0; at < rows.length; at += 100) {
+        const { error } = await sb.from('entries').insert(rows.slice(at, at + 100))
+        if (error) throw new Error(error.message)
+      }
+    },
+
     async edit(id: string, body: string) {
       const { error } = await sb.from('entries')
         .update({ body: await seal(body), tags: extractTags(body) }).eq('id', id)
