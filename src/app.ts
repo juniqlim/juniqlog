@@ -10,6 +10,7 @@ import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
 import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
+import { buildBackup, deliver } from './backup'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 
@@ -254,6 +255,23 @@ async function copyToClipboard(text: string, btn: HTMLElement) {
   setTimeout(() => { btn.textContent = mark }, 1200)
 }
 
+/** 전량을 zip 하나로 묶어 넘긴다. 어디에 둘지는 공유시트에서 사용자가 정한다 */
+async function exportAll(btn: HTMLButtonElement) {
+  const mark = btn.textContent
+  btn.disabled = true
+  btn.textContent = '내보내는 중…'
+  try {
+    const rows = await store.all()
+    await deliver(buildBackup(rows, Intl.DateTimeFormat().resolvedOptions().timeZone, new Date()))
+  } catch (e) {
+    console.error(e)
+    alert('내보내지 못했습니다')
+  } finally {
+    btn.disabled = false
+    btn.textContent = mark
+  }
+}
+
 const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry), btn)
 const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list), btn)
 
@@ -298,6 +316,12 @@ function renderSidebar() {
   trash.innerHTML = `<span>휴지통</span><span class="cnt">${trashCount}</span>`
   trash.onclick = () => pick({ kind: 'trash' })
   el.appendChild(trash)
+
+  const save = document.createElement('button')
+  save.className = 'trash out'
+  save.textContent = '내보내기'
+  save.onclick = () => exportAll(save)
+  el.appendChild(save)
 
   // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
   const out = document.createElement('button')

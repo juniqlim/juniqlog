@@ -81,6 +81,10 @@ export function memoryStore(clock: () => Date = () => new Date()): Store {
       return live.filter(e => matches(e.body, view.q))
     },
 
+    async all(): Promise<LogEntry[]> {
+      return alive().sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+    },
+
     async add(body: string, meta: string | null) {
       const at = now()
       put({

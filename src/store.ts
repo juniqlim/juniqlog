@@ -35,6 +35,8 @@ export interface Store {
 
   index(): Promise<Index>
   list(view: View): Promise<LogEntry[]>
+  /** 내보내기용 전량 — 버린 것은 빼고 쓴 순서대로 */
+  all(): Promise<LogEntry[]>
 
   add(body: string, meta: string | null): Promise<void>
   edit(id: string, body: string): Promise<void>

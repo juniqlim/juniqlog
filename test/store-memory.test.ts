@@ -184,6 +184,33 @@ describe('memoryStore — 사이드바 재료', () => {
   })
 })
 
+describe('memoryStore — 전량', () => {
+  it('내보내려면 달을 가리지 않고 전부 준다', async () => {
+    const { store, set } = make()
+    await store.add('칠월', null)
+    set('2026-09-01T10:00:00Z')
+    await store.add('구월', null)
+
+    expect((await store.all()).map(e => e.body)).toEqual(['칠월', '구월'])
+  })
+
+  it('버린 것은 내보내지 않는다', async () => {
+    const { store } = make()
+    await store.add('버릴 것', null)
+    const [e] = await store.list(day)
+    await store.trash(e.id)
+
+    expect(await store.all()).toEqual([])
+  })
+
+  it('정황을 함께 준다 — 백업에서 빠지면 안 된다', async () => {
+    const { store } = make()
+    await store.add('걸었다', '{"dev":"iPhone"}')
+
+    expect((await store.all())[0].meta).toBe('{"dev":"iPhone"}')
+  })
+})
+
 describe('memoryStore — 바뀔 때 알린다', () => {
   it('쓰면 지켜보던 쪽이 안다', async () => {
     const { store } = make()

@@ -6,7 +6,7 @@ export interface LogEntry {
   updated_at: string
   tags: string[]
   deleted_at: string | null
-  /** 암호화된 정황(위치·타임존·기기). 남길 게 없었으면 null */
+  /** 정황(위치·타임존·기기) JSON. 남길 게 없었으면 null. 저장소 밖에서는 평문이다 */
   meta: string | null
 }
 
@@ -16,7 +16,7 @@ export interface DateGroup {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const DAYS = ['일', '월', '화', '수', '목', '금', '토']
+export const DAYS = ['일', '월', '화', '수', '목', '금', '토']
 
 export function timeOf(iso: string): string {
   const d = new Date(iso)

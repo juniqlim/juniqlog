@@ -2,15 +2,18 @@
  * 전량 받아 복호화해 notes/ 로 떨군다.
  *
  * Supabase 가 사라져도 내용은 노트북에 남는다 — 이게 실질적인 백업이다.
- * 브라우저와 같은 src/crypto.ts 를 쓴다. 복제하면 언젠가 어긋난다.
+ * 브라우저와 같은 src/crypto.ts, 같은 src/export.ts 를 쓴다.
+ * 복제하면 언젠가 어긋난다.
  *
- *   node tools/export.ts            월별 마크다운 (사람이 읽기 좋다)
- *   node tools/export.ts --json     한 파일 JSON (집계·통계에 좋다)
+ *   node tools/export.ts            notes/2026/07/25.md (사람이 읽기 좋다)
+ *   node tools/export.ts --json     notes/entries.json (집계·통계에 좋다)
  *   node tools/export.ts --all      둘 다
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { importKey, decrypt, isEncrypted } from '../src/crypto.ts'
-import { describeMeta } from '../src/meta.ts'
+import { toExported, filesByDay, toJson } from '../src/export.ts'
+import type { LogEntry } from '../src/timeline.ts'
 
 process.loadEnvFile('.env')
 
@@ -32,16 +35,7 @@ const wrapped: { wrapped_dek: string }[] = await fetch(
 if (wrapped.length === 0) throw new Error('user_keys 에 감싼 키가 없다')
 const key = await importKey(await decrypt(wrapped[0].wrapped_dek, kek))
 
-interface Row {
-  id: string
-  body: string
-  tags: string[]
-  created_at: string
-  updated_at: string
-  meta: string | null
-}
-
-const rows: Row[] = await fetch(
+const rows: LogEntry[] = await fetch(
   `${SUPABASE_URL}/rest/v1/entries`
   + `?select=id,body,tags,created_at,updated_at,meta&deleted_at=is.null&order=created_at.asc`,
   { headers: auth },
@@ -50,54 +44,32 @@ const rows: Row[] = await fetch(
   return res.json()
 })
 
-const opened = []
+const opened: LogEntry[] = []
 let failed = 0
 
 for (const row of rows) {
   const body = await open(row.body)
   if (body === null) { failed++; continue }
-
-  opened.push({
-    id: row.id,
-    at: row.created_at,
-    edited: row.updated_at > row.created_at ? row.updated_at : null,
-    tags: row.tags,
-    body,
-    meta: row.meta === null ? null : JSON.parse(await open(row.meta) ?? 'null'),
-  })
+  opened.push({ ...row, body, meta: row.meta === null ? null : await open(row.meta) })
 }
 
+const items = toExported(opened)
+
 mkdirSync(OUT_DIR, { recursive: true })
-if (wantMarkdown) writeMarkdown()
+if (wantMarkdown) {
+  const files = filesByDay(items, HOME_TZ)
+  for (const [name, text] of files) {
+    const path = `${OUT_DIR}/${name}`
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, text)
+  }
+  console.log(`${items.length}건 → ${files.size}개 마크다운 (${OUT_DIR}/)`)
+}
 if (wantJson) {
-  writeFileSync(`${OUT_DIR}/entries.json`, JSON.stringify(opened, null, 2))
+  writeFileSync(`${OUT_DIR}/entries.json`, toJson(items))
   console.log(`${OUT_DIR}/entries.json`)
 }
 if (failed > 0) console.error(`⚠️  ${failed}건은 복호화하지 못했다`)
-
-function writeMarkdown() {
-  const byMonth = new Map<string, string[]>()
-
-  for (const e of opened) {
-    const at = new Date(e.at)
-    const month = `${at.getFullYear()}-${pad(at.getMonth() + 1)}`
-
-    const bits = [
-      `## ${pad(at.getDate())}일 ${pad(at.getHours())}:${pad(at.getMinutes())}`,
-      ...e.tags.map(t => '#' + t),
-    ]
-    const context = describeMeta(e.meta === null ? null : JSON.stringify(e.meta), HOME_TZ)
-    if (context !== '') bits.push('·', context)
-    if (e.edited !== null) bits.push(`(수정 ${new Date(e.edited).toLocaleString('ko-KR')})`)
-
-    byMonth.set(month, [...(byMonth.get(month) ?? []), `${bits.join(' ')}\n\n${e.body}\n`])
-  }
-
-  for (const [month, blocks] of byMonth) {
-    writeFileSync(`${OUT_DIR}/${month}.md`, `# ${month}\n\n${blocks.join('\n')}`)
-  }
-  console.log(`${opened.length}건 → ${byMonth.size}개 마크다운 (${OUT_DIR}/)`)
-}
 
 async function open(value: string): Promise<string | null> {
   if (!isEncrypted(value)) return value   // 마이그레이션 전 평문
@@ -112,8 +84,4 @@ function need(name: string): string {
   const v = process.env[name]
   if (!v) throw new Error(`.env 에 ${name} 이 없다`)
   return v
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
 }

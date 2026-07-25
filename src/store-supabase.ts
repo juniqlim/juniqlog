@@ -24,14 +24,21 @@ export function supabaseStore(): Store {
   const seal = (plain: string) => encrypt(plain, key!)
 
   /** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
-  const unseal = (rows: LogEntry[]) => Promise.all(rows.map(async e => {
-    if (!isEncrypted(e.body)) return e   // 마이그레이션 전 평문
+  const unseal = (rows: LogEntry[]) => Promise.all(rows.map(async e => ({
+    ...e,
+    body: await open(e.body) ?? '⚠️ 복호화하지 못했습니다',
+    meta: e.meta === null ? null : await open(e.meta),
+  })))
+
+  /** 밖으로는 평문만 내보낸다 — 정황도 예외가 아니다 */
+  async function open(value: string): Promise<string | null> {
+    if (!isEncrypted(value)) return value   // 마이그레이션 전 평문
     try {
-      return { ...e, body: await decrypt(e.body, key!) }
+      return await decrypt(value, key!)
     } catch {
-      return { ...e, body: '⚠️ 복호화하지 못했습니다' }
+      return null
     }
-  }))
+  }
 
   async function fetchKey(token: string): Promise<CryptoKey> {
     const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
@@ -114,6 +121,14 @@ export function supabaseStore(): Store {
 
       const rows = await unseal((data ?? []) as LogEntry[])
       return view.kind === 'search' ? rows.filter(e => matches(e.body, view.q)) : rows
+    },
+
+    async all(): Promise<LogEntry[]> {
+      const { data, error } = await sb.from('entries')
+        .select('*').is('deleted_at', null)
+        .order('created_at', { ascending: true })
+      if (error) throw new Error(error.message)
+      return unseal((data ?? []) as LogEntry[])
     },
 
     async add(body: string, meta: string | null) {
