@@ -9,7 +9,9 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "test": "vitest run"
+    "test": "vitest run",
+    "export": "node tools/export.ts",
+    "migrate": "node tools/migrate.ts"
   },
   "keywords": [],
   "author": "",

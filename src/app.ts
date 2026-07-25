@@ -1,12 +1,13 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
-import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
+import { timeOf, dateOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
 import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './calendar'
 
 /** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
 const TRASH_DAYS = 7
 import { extractTags, parseLines, type Piece } from './tags'
-import { isSearchable, searchPattern } from './search'
+import { isSearchable, matches } from './search'
+import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -37,8 +38,33 @@ let trashCount = 0
 let openYears = new Set<number>()
 let openMonths = new Set<string>()
 let channel: ReturnType<typeof sb.channel> | null = null
+let noteKey: CryptoKey | null = null
 
 const $ = (id: string) => document.getElementById(id)!
+
+/* ---- 본문 암호화 ---- */
+
+/** 키는 Supabase가 아니라 Vercel에 있다. 로그인한 본인에게만 내준다 */
+async function fetchKey(token: string): Promise<CryptoKey> {
+  const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
+  if (!res.ok) throw new Error(`키를 받지 못했다 (${res.status})`)
+  const { key } = await res.json() as { key: string }
+  return importKey(key)
+}
+
+const seal = (body: string) => encrypt(body, noteKey!)
+
+/** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
+async function unseal(rows: LogEntry[]): Promise<LogEntry[]> {
+  return Promise.all(rows.map(async e => {
+    if (!isEncrypted(e.body)) return e   // 마이그레이션 전 평문
+    try {
+      return { ...e, body: await decrypt(e.body, noteKey!) }
+    } catch {
+      return { ...e, body: '⚠️ 복호화하지 못했습니다' }
+    }
+  }))
+}
 
 /* ---- realtime ---- */
 function subscribe(token: string) {
@@ -61,8 +87,18 @@ const showApp = () => { $('auth').hidden = true; $('app').hidden = false }
 
 async function refreshAuth() {
   const { data: { session } } = await sb.auth.getSession()
-  if (session) { showApp(); await refresh(); subscribe((session as Session).access_token) }
-  else { unsubscribe(); showAuth() }
+  if (!session) { noteKey = null; unsubscribe(); showAuth(); return }
+
+  const token = (session as Session).access_token
+  try {
+    noteKey = await fetchKey(token)
+  } catch (e) {
+    // 키가 없으면 본문을 읽을 수도 쓸 수도 없다. 반쯤 열린 앱을 보여주지 않는다
+    console.error(e)
+    $('authmsg').textContent = '암호화 키를 받지 못했습니다. 새로고침해 보세요.'
+    unsubscribe(); showAuth(); return
+  }
+  showApp(); await refresh(); subscribe(token)
 }
 sb.auth.onAuthStateChange(() => { refreshAuth() })
 
@@ -122,7 +158,7 @@ async function loadEntries() {
       .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
       .order('deleted_at', { ascending: false })
     if (error) { console.error(error); return }
-    entries = (data ?? []) as LogEntry[]
+    entries = await unseal((data ?? []) as LogEntry[])
     return
   }
 
@@ -133,14 +169,16 @@ async function loadEntries() {
   } else if (view.kind === 'day') {
     const { from, to } = dayRange(view.year, view.month, view.day)
     q = q.gte('created_at', from).lt('created_at', to)
-  } else if (view.kind === 'search') {
-    q = q.ilike('body', searchPattern(view.q))
-  } else {
+  } else if (view.kind === 'tag') {
     q = q.contains('tags', [view.tag])
   }
+  // 검색은 거르지 않고 전량 받는다 — 서버가 보는 건 암호문뿐이라 ILIKE를 쓸 수 없다
+
   const { data, error } = await q.order('created_at', { ascending: true })
   if (error) { console.error(error); return }
-  entries = (data ?? []) as LogEntry[]
+
+  const rows = await unseal((data ?? []) as LogEntry[])
+  entries = view.kind === 'search' ? rows.filter(e => matches(e.body, view.q)) : rows
 }
 
 async function refresh() {
@@ -159,7 +197,8 @@ async function submit() {
   const body = ta.value
   if (body.trim() === '') return
   ta.value = ''; ta.style.height = '42px'
-  const { error } = await sb.from('entries').insert({ body, tags: extractTags(body) })
+  // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
+  const { error } = await sb.from('entries').insert({ body: await seal(body), tags: extractTags(body) })
   if (error) { console.error(error); alert('저장 실패: ' + error.message); return }
   view = todayView()
   await refresh()
@@ -176,7 +215,7 @@ async function addTag(entry: LogEntry, tag: string) {
 async function saveEdit(entry: LogEntry, body: string) {
   if (body.trim() === '' || body === entry.body) return
   const { error } = await sb.from('entries')
-    .update({ body, tags: extractTags(body) }).eq('id', entry.id)
+    .update({ body: await seal(body), tags: extractTags(body) }).eq('id', entry.id)
   if (error) { console.error(error); alert('수정 실패: ' + error.message); return }
   await refresh()
 }
@@ -401,7 +440,8 @@ function renderHeading() {
   if (view.kind === 'trash') label.textContent = `휴지통 · 최근 ${TRASH_DAYS}일 · ${entries.length}건`
   else if (view.kind === 'search') label.textContent = `검색 “${view.q}” · ${entries.length}건`
   else if (view.kind === 'tag') label.innerHTML = `태그 <b>#${view.tag}</b> 모아보기`
-  else if (view.kind === 'day') label.innerHTML = `<b>${view.year}. ${pad(view.month)}. ${pad(view.day)}</b>`
+  else if (view.kind === 'day')
+    label.innerHTML = `<b>${dateOf(new Date(view.year, view.month - 1, view.day).toISOString())}</b>`
   else label.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
   fb.appendChild(label)
 
@@ -426,10 +466,15 @@ function renderTimeline() {
   }
 
   const inTrash = view?.kind === 'trash'
+  // 하루치만 보고 있으면 머리말이 이미 그 날짜다 — 두 번 쓰지 않는다
+  const showDates = view?.kind !== 'day'
+
   for (const group of groupByDate(entries)) {
-    const head = document.createElement('div')
-    head.className = 'datehead'; head.textContent = group.date
-    tl.appendChild(head)
+    if (showDates) {
+      const head = document.createElement('div')
+      head.className = 'datehead'; head.textContent = group.date
+      tl.appendChild(head)
+    }
 
     for (const e of group.entries) {
       const el = document.createElement('div')

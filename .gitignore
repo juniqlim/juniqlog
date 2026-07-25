@@ -3,3 +3,7 @@ dist
 .env
 .env.local
 .vercel
+
+# 복호화한 평문 노트 — 절대 커밋하지 않는다
+notes
+.env*
