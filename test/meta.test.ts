@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isFresh, buildMeta, deviceOf, type Fix } from '../src/meta'
+import { isFresh, buildMeta, deviceOf, describeMeta, type Fix } from '../src/meta'
 
 const fix = (at: number): Fix => ({ lat: 37.4021, lon: 126.9227, acc: 30, at })
 
@@ -75,5 +75,33 @@ describe('buildMeta', () => {
 
   it('남길 게 하나도 없으면 아무것도 만들지 않는다', () => {
     expect(buildMeta(null, '', '', null)).toBe(null)
+  })
+})
+
+
+describe('describeMeta', () => {
+  it('기기와 좌표를 한 줄로 줄인다', () => {
+    const meta = '{"loc":{"lat":37.4021,"lon":126.9227,"acc":30},"tz":"Asia/Seoul","dev":"iPhone"}'
+
+    expect(describeMeta(meta, 'Asia/Seoul')).toBe('iPhone · 37.4021,126.9227')
+  })
+
+  // 늘 같은 시간대면 적어봤자 줄만 길어진다. 여행 갔을 때만 눈에 띄어야 한다
+  it('사는 시간대와 다를 때만 시간대를 적는다', () => {
+    const meta = '{"tz":"Asia/Tokyo","dev":"iPhone"}'
+
+    expect(describeMeta(meta, 'Asia/Seoul')).toBe('iPhone · Asia/Tokyo')
+  })
+
+  it('위치를 못 받았으면 그 자리를 비운다', () => {
+    expect(describeMeta('{"tz":"Asia/Seoul","dev":"Mac"}', 'Asia/Seoul')).toBe('Mac')
+  })
+
+  it('정황이 없으면 빈 문자열이다', () => {
+    expect(describeMeta(null, 'Asia/Seoul')).toBe('')
+  })
+
+  it('깨진 값이 와도 멈추지 않는다', () => {
+    expect(describeMeta('이건 JSON 이 아니다', 'Asia/Seoul')).toBe('')
   })
 })

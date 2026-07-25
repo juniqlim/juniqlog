@@ -47,6 +47,28 @@ export function buildMeta(
   return Object.keys(meta).length === 0 ? null : JSON.stringify(meta)
 }
 
+/**
+ * 내보낼 때 쓰는 한 줄 요약 — "iPhone · 37.4021,126.9227"
+ * 시간대는 사는 곳과 다를 때만 적는다. 늘 같으면 줄만 길어진다.
+ */
+export function describeMeta(json: string | null, homeTz: string): string {
+  if (json === null) return ''
+
+  let meta: { loc?: { lat: number; lon: number }; tz?: string; dev?: string }
+  try {
+    meta = JSON.parse(json)
+  } catch {
+    return ''   // 깨진 값 하나 때문에 내보내기를 멈추지 않는다
+  }
+
+  const parts: string[] = []
+  if (meta.dev) parts.push(meta.dev)
+  if (meta.tz && meta.tz !== homeTz) parts.push(meta.tz)
+  if (meta.loc) parts.push(`${meta.loc.lat},${meta.loc.lon}`)
+
+  return parts.join(' · ')
+}
+
 function round(n: number, digits: number): number {
   return Number(n.toFixed(digits))
 }
