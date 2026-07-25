@@ -4,6 +4,8 @@ export interface LogEntry {
   created_at: string
   tags: string[]
   deleted_at: string | null
+  /** 암호화된 좌표. 위치를 못 받았으면 null */
+  loc: string | null
 }
 
 export interface DateGroup {

@@ -12,6 +12,7 @@ import { extractTags, parseLines, type Piece } from './tags'
 import { isSearchable, matches } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
+import { isFresh, encodeFix, type Fix } from './geo'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
@@ -59,6 +60,44 @@ async function fetchKey(token: string): Promise<CryptoKey> {
 
 const seal = (body: string) => encrypt(body, noteKey!)
 
+/* ---- 위치 ---- */
+
+/** 이보다 오래된 좌표는 쓰지 않는다 — 그 사이 움직였을 수 있다 */
+const FIX_MAX_AGE = 5 * 60_000
+
+/** 위치를 기다려주는 한도. 지하나 권한 거부에서도 글은 반드시 올라가야 한다 */
+const FIX_WAIT = 4_000
+
+let lastFix: Fix | null = null
+
+/** 정확도를 낮게 잡아 빠른 셀·와이파이 측위를 쓴다. GPS 를 켜면 실내에서 한참 걸린다 */
+function locate(timeout: number): Promise<Fix | null> {
+  if (!('geolocation' in navigator)) return Promise.resolve(null)
+
+  return new Promise(resolve => {
+    navigator.geolocation.getCurrentPosition(
+      p => {
+        lastFix = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() }
+        resolve(lastFix)
+      },
+      () => resolve(null),   // 거부했거나 못 받았다. 위치 없이 쓴다
+      { enableHighAccuracy: false, timeout, maximumAge: FIX_MAX_AGE },
+    )
+  })
+}
+
+/** 앱을 열 때 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다 */
+const trackLocation = () => { void locate(10_000) }
+
+/** 좌표도 본문과 같은 키로 잠근다 */
+async function sealLocation(): Promise<string | null> {
+  const fix = isFresh(lastFix, Date.now(), FIX_MAX_AGE)
+    ? lastFix
+    : await locate(FIX_WAIT)   // 오래됐으면 새로 받는다. 못 받으면 위치 없이 간다
+
+  return fix === null ? null : seal(encodeFix(fix))
+}
+
 /** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
 async function unseal(rows: LogEntry[]): Promise<LogEntry[]> {
   return Promise.all(rows.map(async e => {
@@ -103,7 +142,7 @@ async function refreshAuth() {
     $('authmsg').textContent = '암호화 키를 받지 못했습니다. 새로고침해 보세요.'
     unsubscribe(); showAuth(); return
   }
-  showApp(); await refresh(); subscribe(token)
+  showApp(); trackLocation(); await refresh(); subscribe(token)
 }
 sb.auth.onAuthStateChange(() => { refreshAuth() })
 
@@ -210,7 +249,7 @@ async function submit() {
   try {
     // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
     const { error } = await sb.from('entries')
-      .insert({ body: await seal(body), tags: extractTags(body) })
+      .insert({ body: await seal(body), tags: extractTags(body), loc: await sealLocation() })
     if (error) throw new Error(error.message)
   } catch (e) {
     // 네트워크가 끊기면 insert 는 예외를 던진다. 잡지 않으면 알림도 없이 사라진다
@@ -600,7 +639,9 @@ ta.addEventListener('input', () => {
 ta.value = loadDraft(localStorage)
 if (ta.value !== '') fitInput()
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && !$('app').hidden) refresh()
+  if (document.hidden || $('app').hidden) return
+  refresh()
+  trackLocation()   // 다른 데 갔다 온 사이 움직였을 수 있다
 })
 
 // 앱 껍데기를 캐시해 연결이 없어도 뜨게 한다. 개발 중에는 방해만 되므로 걸지 않는다

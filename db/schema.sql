@@ -24,6 +24,11 @@ create policy "own entries" on public.entries for all
 alter table public.entries
   add column if not exists deleted_at timestamptz;
 
+-- 글을 쓴 위치. 본문과 같은 DEK 로 암호화해서 넣는다({"lat":..,"lon":..,"acc":..}).
+-- 서버가 걸러줄 일이 없어 평문으로 둘 이유가 없다 — 검색은 어차피 브라우저에서 한다.
+alter table public.entries
+  add column if not exists loc text;
+
 create index if not exists entries_user_created
   on public.entries (user_id, created_at desc);
 
