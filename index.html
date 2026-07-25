@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>juniqlog</title>
+<title>thinkthink</title>
 <link rel="manifest" href="/manifest.json">
 <!-- 상태 표시줄 색. 고르기 전에는 기기 설정을 따라야 하므로 둘로 나눠 적는다 -->
 <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="log">
+<meta name="apple-mobile-web-app-title" content="thinkthink">
 <style>
   /* 색은 여기 한 곳에만 적는다. light-dark() 가 앞이 밝을 때, 뒤가 어두울 때다.
      어느 쪽을 쓸지는 color-scheme 이 정한다 — 기본은 기기 설정을 따르고,
@@ -129,6 +129,7 @@
   #auth { max-width:360px; margin:18vh auto; padding:24px; text-align:center; }
   #auth h1 { font-size:22px; margin:0 0 4px; }
   #auth p { color:var(--dim); font-size:13px; margin:0 0 18px; }
+  #auth .sub { color:var(--faint); margin:0 0 16px; }
   #auth input { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
                 border-radius:10px; padding:11px; font:inherit; margin-bottom:10px; }
   #auth button { width:100%; background:var(--accent); color:var(--bg); border:0; border-radius:10px; padding:11px; font-weight:600; cursor:pointer; }
@@ -146,7 +147,8 @@
 <body>
 
 <div id="auth" hidden>
-  <h1>juniqlog</h1>
+  <h1>thinkthink</h1>
+  <p class="sub">think about thinking</p>
   <p>이메일로 로그인 링크를 받습니다. 최초 1회면 이후 로그인 상태가 유지됩니다.</p>
   <button id="google" class="google">Google로 로그인</button>
   <div class="or">또는</div>

@@ -19,7 +19,7 @@ const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes)
 
 describe('buildBackup', () => {
   it('언제 뽑은 사본인지 이름에 남긴다', () => {
-    expect(buildBackup([row()], 'Asia/Seoul', at).name).toBe('juniqlog-2026-07-26.zip')
+    expect(buildBackup([row()], 'Asia/Seoul', at).name).toBe('thinkthink-2026-07-26.zip')
   })
 
   it('읽을 마크다운과 되돌릴 JSON 을 함께 담는다', () => {

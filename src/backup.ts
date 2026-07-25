@@ -26,7 +26,7 @@ export function buildBackup(rows: LogEntry[], homeTz: string, at: Date): Backup 
     .map(([name, text]) => ({ name, body: encoder.encode(text) }))
   files.push({ name: 'entries.json', body: encoder.encode(toJson(items)) })
 
-  return { name: `juniqlog-${fileStamp(at)}.zip`, bytes: zip(files, at) }
+  return { name: `thinkthink-${fileStamp(at)}.zip`, bytes: zip(files, at) }
 }
 
 /**
