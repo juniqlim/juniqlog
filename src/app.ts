@@ -1,6 +1,6 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
-import { timeOf, dateOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
+import { timeOf, dateOf, copyText, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
 import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './calendar'
 
 /** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
@@ -269,6 +269,20 @@ async function removeEntry(entry: LogEntry) {
   await refresh()
 }
 
+/** 눌렀는지 알 수 있게 잠깐 체크로 바꾼다 — 클립보드는 눈에 보이지 않는다 */
+async function copyEntry(entry: LogEntry, btn: HTMLElement) {
+  try {
+    await navigator.clipboard.writeText(copyText(entry))
+  } catch (e) {
+    console.error(e)
+    alert('복사하지 못했습니다')
+    return
+  }
+  const mark = btn.textContent
+  btn.textContent = '✓'
+  setTimeout(() => { btn.textContent = mark }, 1200)
+}
+
 /* ---- sidebar ---- */
 const openSidebar = (on: boolean) => {
   $('sidebar').hidden = !on
@@ -511,7 +525,8 @@ function renderTimeline() {
           <span class="actions">${inTrash
             ? `<button class="act back" title="복원">↩</button>
                <button class="act purge" title="완전 삭제">×</button>`
-            : `<button class="act edit" title="수정">✎</button>
+            : `<button class="act copy" title="복사">⧉</button>
+               <button class="act edit" title="수정">✎</button>
                <button class="act tag" title="태그 달기">＃</button>
                <button class="act del" title="삭제">×</button>`}
           </span>
@@ -526,6 +541,7 @@ function renderTimeline() {
           const t = prompt('태그')?.trim()
           if (t) addTag(e, t)
         }
+        el.querySelector<HTMLElement>('.copy')!.onclick = ev => copyEntry(e, ev.currentTarget as HTMLElement)
       }
 
       // 태그 칩은 시분초 옆에 (본문 아래 줄을 쓰지 않도록)

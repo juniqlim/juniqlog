@@ -24,6 +24,16 @@ export function dateOf(iso: string): string {
   return `${d.getFullYear()}. ${pad(d.getMonth() + 1)}. ${pad(d.getDate())}. (${DAYS[d.getDay()]})`
 }
 
+/**
+ * 밖으로 옮겨 붙일 때는 언제 쓴 글인지가 함께 가야 한다.
+ * 날짜는 한국 로케일 표기(2026. 7. 25.) — 화면의 목록 머리말과 달리 0을 채우지 않는다.
+ */
+export function copyText(entry: { created_at: string; body: string }): string {
+  const d = new Date(entry.created_at)
+  const date = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`
+  return `${date} ${timeOf(entry.created_at)}\n${entry.body}`
+}
+
 export function visible(entries: LogEntry[]): LogEntry[] {
   return entries.filter(e => e.deleted_at === null)
 }

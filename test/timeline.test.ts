@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { timeOf, dateOf, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
+import { timeOf, dateOf, copyText, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
 
 
 describe('tagsOf', () => {
@@ -37,6 +37,27 @@ describe('timeOf', () => {
 describe('dateOf', () => {
   it('년월일과 요일을 보여준다', () => {
     expect(dateOf('2026-07-24T14:32:07')).toBe('2026. 07. 24. (금)')
+  })
+})
+
+
+describe('copyText', () => {
+  it('언제 쓴 글인지 앞에 붙인다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코 먹고싶다' }
+
+    expect(copyText(entry)).toBe('2026. 7. 24. 14:32:07\n타코 먹고싶다')
+  })
+
+  it('날짜는 0을 채우지 않고 시각은 채운다', () => {
+    const entry = { created_at: '2026-01-05T09:05:07', body: '새해' }
+
+    expect(copyText(entry)).toBe('2026. 1. 5. 09:05:07\n새해')
+  })
+
+  it('여러 줄 본문은 그대로 둔다', () => {
+    const entry = { created_at: '2026-07-24T09:05:07', body: '할 일\n- 하나\n- 둘' }
+
+    expect(copyText(entry)).toBe('2026. 7. 24. 09:05:07\n할 일\n- 하나\n- 둘')
   })
 })
 
