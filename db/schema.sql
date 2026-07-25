@@ -24,10 +24,12 @@ create policy "own entries" on public.entries for all
 alter table public.entries
   add column if not exists deleted_at timestamptz;
 
--- 마지막으로 고친 시각. null 이면 쓴 뒤로 손대지 않았다는 뜻이라 그대로 둔다.
--- 앱이 빠뜨릴 수 없도록 트리거로 찍는다 — 스크립트나 대시보드로 고쳐도 남는다.
+-- 마지막으로 고친 시각. 쓴 뒤로 손대지 않았으면 created_at 과 같은 값이다.
+-- now() 는 트랜잭션 시작 시각이라 insert 때 두 컬럼이 정확히 일치한다.
+-- 고쳤는지는 updated_at > created_at 으로 본다 — null 검사가 필요 없다.
+-- 앱이 빠뜨릴 수 없도록 트리거로 찍는다. 스크립트나 대시보드로 고쳐도 남는다.
 alter table public.entries
-  add column if not exists updated_at timestamptz;
+  add column if not exists updated_at timestamptz not null default now();
 
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$
