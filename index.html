@@ -5,106 +5,137 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>juniqlog</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0f1115">
+<!-- 상태 표시줄 색. 고르기 전에는 기기 설정을 따라야 하므로 둘로 나눠 적는다 -->
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="log">
 <style>
+  /* 색은 여기 한 곳에만 적는다. light-dark() 가 앞이 밝을 때, 뒤가 어두울 때다.
+     어느 쪽을 쓸지는 color-scheme 이 정한다 — 기본은 기기 설정을 따르고,
+     사람이 고르면 html[data-theme] 이 덮는다. 브라우저가 첫 페인트부터
+     칠하므로 깜빡이지 않는다. */
+  :root {
+    color-scheme: light dark;
+    --bg:      light-dark(#f6f7f9, #0f1115);   /* 페이지·헤더·입력줄 */
+    --panel:   light-dark(#ffffff, #181b22);   /* 카드·입력칸 */
+    --sidebar: light-dark(#eef0f4, #141720);
+    --sunken:  light-dark(#fbfcfd, #12151c);   /* 고쳐 쓰는 중 */
+    --soft:    light-dark(#eceef2, #232833);   /* 칩·코드·눌린 자리 */
+    --hover:   light-dark(#e6e9ef, #1e222c);
+    --sel:     light-dark(#dce7fa, #233047);   /* 지금 보고 있는 것 */
+    --line:    light-dark(#e2e5ea, #262b36);
+    --line2:   light-dark(#d3d8e0, #313846);
+    --line3:   light-dark(#aebbd4, #3a4560);
+    --text:    light-dark(#1f2328, #e6e8ec);
+    --strong:  light-dark(#35538c, #9fb4d6);   /* 머리말·고른 것 */
+    --dim:     light-dark(#5f6672, #8b93a3);
+    --mute:    light-dark(#6f7683, #7d8697);
+    --faint:   light-dark(#858c98, #6b7484);
+    --ghost:   light-dark(#a9b0bb, #414958);   /* 손대기 전 아이콘 */
+    --accent:  light-dark(#2563eb, #6ea8fe);
+    --veil:    light-dark(#0006, #0008);
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="dark"]  { color-scheme: dark; }
+
   * { box-sizing:border-box; }
   /* hidden 은 display:none 으로 동작하는데, #app 의 display:flex 처럼
      따로 지정한 display 가 그걸 덮어쓴다. 숨기라면 숨어야 한다. */
   [hidden] { display:none !important; }
-  body { margin:0; background:#0f1115; color:#e6e8ec; font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
   /* 스크롤해도 메뉴는 손 닿는 곳에. 자리를 뺏지 않도록 얇게 잡는다 */
   /* 양옆을 1fr 로 맞물려야 제목이 화면 한가운데 온다 — space-between 은 양쪽 폭을 따라 밀린다 */
-  header { position:sticky; top:0; z-index:15; background:#0f1115;
-           padding:1px 16px 4px; border-bottom:1px solid #262b36; font-weight:600;
+  header { position:sticky; top:0; z-index:15; background:var(--bg);
+           padding:1px 16px 4px; border-bottom:1px solid var(--line); font-weight:600;
            display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; }
-  #htitle { font-size:13px; color:#9fb4d6; text-align:center;
+  #htitle { font-size:13px; color:var(--strong); text-align:center;
             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #hact { display:flex; align-items:center; justify-content:flex-end; gap:4px; font-size:13px; }
-  #hact a { color:#6ea8fe; cursor:pointer; font-weight:400; }
+  #hact a { color:var(--accent); cursor:pointer; font-weight:400; }
   #app { display:flex; flex-direction:column; min-height:100vh; }
   #timeline { flex:1; width:100%; max-width:720px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
-  .entry { background:#181b22; border:1px solid #262b36; border-radius:10px; padding:10px 12px; }
-  .time { font-size:12px; color:#8b93a3; }
+  .entry { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .time { font-size:12px; color:var(--dim); }
   .head { display:flex; justify-content:space-between; align-items:center; }
   .meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .meta .chip { font-size:11px; padding:0 7px; }
-  .intag { color:#7d8fa8; }
+  .intag { color:var(--mute); }
   .actions { display:flex; gap:2px; }
-  .act { background:none; border:0; font-size:14px; line-height:1; color:#414958;
+  .act { background:none; border:0; font-size:14px; line-height:1; color:var(--ghost);
          cursor:pointer; padding:2px 5px; border-radius:6px; }
-  .act:hover { color:#9fb4d6; background:#232833; }
+  .act:hover { color:var(--strong); background:var(--soft); }
   .del { font-size:16px; }
   .tags { margin-top:6px; }
   .datehead { max-width:720px; margin:14px auto 2px; padding:0 4px; font-size:13px;
-              font-weight:600; color:#9fb4d6; border-bottom:1px solid #262b36;
+              font-weight:600; color:var(--strong); border-bottom:1px solid var(--line);
               display:flex; align-items:center; justify-content:space-between; }
   .dcopy { font-size:13px; }
   .datehead:first-child { margin-top:0; }
   .body { word-break:break-word; margin:2px 0 6px; }
   .ln { white-space:pre-wrap; min-height:1.6em; }
   .ln.bullet, .ln.number { display:flex; gap:7px; padding-left:4px; }
-  .marker { color:#7d8697; flex:none; min-width:14px; }
-  .body code { background:#232833; border:1px solid #313846; border-radius:5px;
+  .marker { color:var(--mute); flex:none; min-width:14px; }
+  .body code { background:var(--soft); border:1px solid var(--line2); border-radius:5px;
                padding:0 5px; font-size:13px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
-  .body s { color:#7d8697; }
-  .link { color:#6ea8fe; }
-  .editing { width:100%; background:#12151c; color:#e6e8ec; border:1px solid #3a4560;
+  .body s { color:var(--mute); }
+  .link { color:var(--accent); }
+  .editing { width:100%; background:var(--sunken); color:var(--text); border:1px solid var(--line3);
              border-radius:8px; padding:7px 9px; font:inherit; resize:none; }
   .tags { display:flex; flex-wrap:wrap; gap:6px; }
-  .chip { font-size:12px; background:#232833; border:1px solid #313846; color:#9fb4d6;
+  .chip { font-size:12px; background:var(--soft); border:1px solid var(--line2); color:var(--strong);
           border-radius:999px; padding:1px 9px; cursor:pointer; }
-  .chip.add { color:#6b7484; }
-  #composer { position:sticky; bottom:0; background:#0f1115; border-top:1px solid #262b36; padding:12px 16px; }
+  .chip.add { color:var(--faint); }
+  #composer { position:sticky; bottom:0; background:var(--bg); border-top:1px solid var(--line); padding:12px 16px; }
   #composer .inner { max-width:720px; margin:0 auto; display:flex; gap:8px; }
-  textarea { flex:1; resize:none; background:#181b22; color:#e6e8ec; border:1px solid #262b36;
+  textarea { flex:1; resize:none; background:var(--panel); color:var(--text); border:1px solid var(--line);
              border-radius:10px; padding:9px 11px; font:inherit; min-height:42px; max-height:160px; }
-  button.send { background:#6ea8fe; color:#0f1115; border:0; border-radius:10px; padding:0 16px; font-weight:600; cursor:pointer; }
+  button.send { background:var(--accent); color:var(--bg); border:0; border-radius:10px; padding:0 16px; font-weight:600; cursor:pointer; }
   .brand { display:flex; align-items:center; gap:10px; }
-  #menu { background:none; border:0; color:#9fb4d6; font-size:18px; cursor:pointer; padding:0; }
+  #menu { background:none; border:0; color:var(--strong); font-size:18px; cursor:pointer; padding:0; }
   #sidebar { position:fixed; top:0; left:0; bottom:0; width:190px; z-index:20;
-             background:#141720; border-right:1px solid #262b36; padding:14px 8px;
+             background:var(--sidebar); border-right:1px solid var(--line); padding:14px 8px;
              overflow-y:auto; }
   /* 사이드바(20) 바로 아래. 고정 헤더(15)까지 덮어야 아무 데나 눌러도 닫힌다 */
-  #backdrop { position:fixed; inset:0; background:#0008; z-index:19; }
+  #backdrop { position:fixed; inset:0; background:var(--veil); z-index:19; }
   .yr, .row, .dy { display:flex; align-items:center; gap:8px; width:100%; background:none; border:0;
-             color:#e6e8ec; font:inherit; cursor:pointer; padding:5px 8px; border-radius:7px; text-align:left; }
-  .yr:hover, .row:hover, .dy:hover { background:#1e222c; }
-  .mo { padding-left:18px; color:#9aa3b2; font-size:14px; }
-  .dy { padding-left:52px; color:#7d8697; font-size:13px; }
-  .mo.on, .dy.on { background:#233047; color:#9fb4d6; }
+             color:var(--text); font:inherit; cursor:pointer; padding:5px 8px; border-radius:7px; text-align:left; }
+  .yr:hover, .row:hover, .dy:hover { background:var(--hover); }
+  .mo { padding-left:18px; color:var(--mute); font-size:14px; }
+  .dy { padding-left:52px; color:var(--mute); font-size:13px; }
+  .mo.on, .dy.on { background:var(--sel); color:var(--strong); }
   .row .label { flex:1; background:none; border:0; color:inherit; font:inherit;
                 cursor:pointer; text-align:left; padding:0; }
   .caret.btn { background:none; border:0; cursor:pointer; padding:0; }
   .tabs { display:flex; gap:4px; margin-bottom:10px; }
-  .tab { flex:1; background:none; border:0; color:#6b7484; font:inherit; font-size:13px;
+  .tab { flex:1; background:none; border:0; color:var(--faint); font:inherit; font-size:13px;
          cursor:pointer; padding:6px 0; border-radius:7px; }
-  .tab.on { background:#233047; color:#9fb4d6; font-weight:600; }
-  .yr.on { background:#233047; color:#9fb4d6; }
-  .cnt { margin-left:auto; color:#6b7484; font-size:12px; }
-  .empty { color:#6b7484; font-size:13px; padding:12px 8px; text-align:center; }
-  .find { width:100%; background:#181b22; color:#e6e8ec; border:1px solid #262b36;
+  .tab.on { background:var(--sel); color:var(--strong); font-weight:600; }
+  .yr.on { background:var(--sel); color:var(--strong); }
+  .cnt { margin-left:auto; color:var(--faint); font-size:12px; }
+  .empty { color:var(--faint); font-size:13px; padding:12px 8px; text-align:center; }
+  .find { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
           border-radius:8px; padding:8px 10px; font:inherit; font-size:14px; }
   .trash { display:flex; align-items:center; width:100%; margin-top:14px; padding:7px 8px;
-           background:none; border:0; border-top:1px solid #262b36; border-radius:0;
-           color:#8b93a3; font:inherit; font-size:13px; cursor:pointer; }
-  .trash:hover { color:#9fb4d6; }
-  .trash.out { margin-top:0; border-top:0; color:#6b7484; }
-  .trash.on { color:#9fb4d6; font-weight:600; }
-  .caret { color:#6b7484; font-size:11px; width:10px; }
+           background:none; border:0; border-top:1px solid var(--line); border-radius:0;
+           color:var(--dim); font:inherit; font-size:13px; cursor:pointer; }
+  .trash:hover { color:var(--strong); }
+  .trash.out { margin-top:0; border-top:0; color:var(--faint); }
+  .trash.on { color:var(--strong); font-weight:600; }
+  .caret { color:var(--faint); font-size:11px; width:10px; }
   #auth { max-width:360px; margin:18vh auto; padding:24px; text-align:center; }
   #auth h1 { font-size:22px; margin:0 0 4px; }
-  #auth p { color:#8b93a3; font-size:13px; margin:0 0 18px; }
-  #auth input { width:100%; background:#181b22; color:#e6e8ec; border:1px solid #262b36;
+  #auth p { color:var(--dim); font-size:13px; margin:0 0 18px; }
+  #auth input { width:100%; background:var(--panel); color:var(--text); border:1px solid var(--line);
                 border-radius:10px; padding:11px; font:inherit; margin-bottom:10px; }
-  #auth button { width:100%; background:#6ea8fe; color:#0f1115; border:0; border-radius:10px; padding:11px; font-weight:600; cursor:pointer; }
-  #auth button.google { background:#fff; color:#1f2328; margin-bottom:14px; }
-  #auth .or { color:#6b7484; font-size:12px; margin-bottom:14px; }
-  #auth .msg { margin-top:12px; font-size:13px; color:#9fb4d6; min-height:18px; }
+  #auth button { width:100%; background:var(--accent); color:var(--bg); border:0; border-radius:10px; padding:11px; font-weight:600; cursor:pointer; }
+  /* 구글 버튼은 브랜드 색이라 그대로 둔다 — 밝을 때 배경에 묻히지 않게 선만 준다 */
+  #auth button.google { background:#fff; color:#1f2328; border:1px solid var(--line2); margin-bottom:14px; }
+  #auth .or { color:var(--faint); font-size:12px; margin-bottom:14px; }
+  #auth .msg { margin-top:12px; font-size:13px; color:var(--strong); min-height:18px; }
 
   /* iOS 사파리는 입력 글자가 16px 미만이면 포커스할 때 화면을 확대한다.
      확대되면 뷰포트가 어긋나 좌우로 스크롤해야 하고 앱 느낌이 깨진다.

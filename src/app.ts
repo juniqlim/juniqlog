@@ -12,6 +12,7 @@ import { saveDraft, loadDraft } from './draft'
 import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
 import { buildBackup, deliver, readBackup } from './backup'
 import { plan } from './import'
+import { currentTheme, toggle, label, barColor, KEY, type Theme } from './theme'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 
@@ -273,6 +274,25 @@ async function exportAll(btn: HTMLButtonElement) {
   }
 }
 
+/* ---- 밝게 · 어둡게 ---- */
+const theme = () =>
+  currentTheme(localStorage.getItem(KEY), matchMedia('(prefers-color-scheme: dark)').matches)
+
+/**
+ * color-scheme 만 넘긴다. 색은 CSS 가 쥐고 있다.
+ * 상태 표시줄은 media 로 갈라 적어둔 것을 고른 값으로 덮는다.
+ */
+function setTheme(next: Theme) {
+  localStorage.setItem(KEY, next)
+  document.documentElement.dataset.theme = next
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    meta.setAttribute('content', barColor(next))
+  }
+}
+
+/** 고른 적이 있으면 그것부터 입고 시작한다 */
+if (localStorage.getItem(KEY) !== null) setTheme(theme())
+
 /** 파일을 고르게 하고, 이미 있는 것은 빼고 넣는다 */
 function pickBackup(btn: HTMLButtonElement) {
   const input = document.createElement('input')
@@ -369,6 +389,12 @@ function renderSidebar() {
   load.textContent = '가져오기'
   load.onclick = () => pickBackup(load)
   el.appendChild(load)
+
+  const skin = document.createElement('button')
+  skin.className = 'trash out'
+  skin.textContent = label(theme())
+  skin.onclick = () => { setTheme(toggle(theme())); skin.textContent = label(theme()) }
+  el.appendChild(skin)
 
   // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
   const out = document.createElement('button')
