@@ -13,13 +13,21 @@ const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const OUT_DIR = 'notes'
 
 const serviceKey = need('SUPABASE_SERVICE_KEY')
-const key = await importKey(need('NOTE_KEY'))
+const auth = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }
+
+// 본문을 여는 키(DEK)는 KEK 로 감싸여 user_keys 에 있다
+const kek = await importKey(need('NOTE_KEK'))
+const wrapped: { wrapped_dek: string }[] = await fetch(
+  `${SUPABASE_URL}/rest/v1/user_keys?select=wrapped_dek`, { headers: auth },
+).then(res => res.json())
+if (wrapped.length === 0) throw new Error('user_keys 에 감싼 키가 없다')
+const key = await importKey(await decrypt(wrapped[0].wrapped_dek, kek))
 
 interface Row { id: string; body: string; tags: string[]; created_at: string }
 
 const rows: Row[] = await fetch(
   `${SUPABASE_URL}/rest/v1/entries?select=id,body,tags,created_at&deleted_at=is.null&order=created_at.asc`,
-  { headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` } },
+  { headers: auth },
 ).then(res => {
   if (!res.ok) throw new Error(`조회 실패 ${res.status}: ${res.statusText}`)
   return res.json()
