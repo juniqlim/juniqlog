@@ -8,6 +8,7 @@ const TRASH_DAYS = 7
 import { extractTags, parseLines, type Piece } from './tags'
 import { isSearchable, matches } from './search'
 import { isSubmit, isCancel } from './input'
+import { saveDraft, loadDraft } from './draft'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
@@ -193,14 +194,32 @@ function scrollToLatest() {
   window.scrollTo({ top: document.body.scrollHeight })
 }
 
+let sending = false
+
 async function submit() {
   const ta = $('input') as HTMLTextAreaElement
   const body = ta.value
-  if (body.trim() === '') return
+  if (body.trim() === '' || sending) return
+
+  // 서버가 받은 것을 확인하기 전에는 입력창을 비우지 않는다.
+  // 먼저 비웠다가 전송이 실패하면 글이 그대로 사라진다.
+  sending = true
+  try {
+    // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
+    const { error } = await sb.from('entries')
+      .insert({ body: await seal(body), tags: extractTags(body) })
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    // 네트워크가 끊기면 insert 는 예외를 던진다. 잡지 않으면 알림도 없이 사라진다
+    console.error(e)
+    alert(`저장하지 못했습니다. 글은 그대로 두었습니다.\n\n${(e as Error).message}`)
+    return
+  } finally {
+    sending = false
+  }
+
   ta.value = ''; ta.style.height = '42px'
-  // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
-  const { error } = await sb.from('entries').insert({ body: await seal(body), tags: extractTags(body) })
-  if (error) { console.error(error); alert('저장 실패: ' + error.message); return }
+  saveDraft('', localStorage)
   view = todayView()
   await refresh()
 }
@@ -215,9 +234,16 @@ async function addTag(entry: LogEntry, tag: string) {
 
 async function saveEdit(entry: LogEntry, body: string) {
   if (body.trim() === '' || body === entry.body) return
-  const { error } = await sb.from('entries')
-    .update({ body: await seal(body), tags: extractTags(body) }).eq('id', entry.id)
-  if (error) { console.error(error); alert('수정 실패: ' + error.message); return }
+  try {
+    const { error } = await sb.from('entries')
+      .update({ body: await seal(body), tags: extractTags(body) }).eq('id', entry.id)
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    // 실패해도 수정창은 그대로 둔다 — 고친 내용을 잃지 않는다
+    console.error(e)
+    alert(`수정하지 못했습니다. 고친 내용은 그대로 두었습니다.\n\n${(e as Error).message}`)
+    return
+  }
   await refresh()
 }
 
@@ -525,10 +551,18 @@ const ta = $('input') as HTMLTextAreaElement
 ta.addEventListener('keydown', e => {
   if (isSubmit(e)) { e.preventDefault(); submit() }
 })
-ta.addEventListener('input', () => {
+const fitInput = () => {
   ta.style.height = '42px'
   ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
+}
+ta.addEventListener('input', () => {
+  fitInput()
+  saveDraft(ta.value, localStorage)
 })
+
+// 쓰다 만 글은 앱을 껐다 켜도, 며칠 뒤에도 그대로 있다
+ta.value = loadDraft(localStorage)
+if (ta.value !== '') fitInput()
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && !$('app').hidden) refresh()
 })
