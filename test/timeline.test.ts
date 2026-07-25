@@ -63,21 +63,22 @@ describe('copyText', () => {
 
 
 describe('copyGroupText', () => {
-  it('그날 글을 시각과 함께 이어 붙인다', () => {
+  // 잘라 붙여도 각 글이 혼자 읽혀야 하므로 날짜를 글마다 붙인다
+  it('글마다 년월일과 시각을 붙여 이어 놓는다', () => {
     const entries = [
       { created_at: '2026-07-24T09:05:07', body: '아침' },
       { created_at: '2026-07-24T14:32:07', body: '점심' },
     ]
 
     expect(copyGroupText(entries)).toBe(
-      '2026. 7. 24.\n\n09:05:07\n아침\n\n14:32:07\n점심',
+      '2026. 7. 24. 09:05:07\n아침\n\n2026. 7. 24. 14:32:07\n점심',
     )
   })
 
-  it('한 건이면 그것만 넣는다', () => {
+  it('한 건이면 개별 복사와 똑같다', () => {
     const entries = [{ created_at: '2026-07-24T09:05:07', body: '아침' }]
 
-    expect(copyGroupText(entries)).toBe('2026. 7. 24.\n\n09:05:07\n아침')
+    expect(copyGroupText(entries)).toBe(copyText(entries[0]))
   })
 
   it('빈 목록이면 빈 문자열이다', () => {

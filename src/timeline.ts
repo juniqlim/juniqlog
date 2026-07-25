@@ -35,12 +35,12 @@ export function copyText(entry: { created_at: string; body: string }): string {
   return `${plainDate(entry.created_at)} ${timeOf(entry.created_at)}\n${entry.body}`
 }
 
-/** 하루치를 한 번에. 날짜는 맨 위 한 번만 쓰고 글마다 시각을 붙인다 */
+/**
+ * 하루치를 한 번에.
+ * 날짜를 맨 위에 한 번만 쓰지 않는다 — 잘라 붙였을 때 각 글이 혼자 읽혀야 한다.
+ */
 export function copyGroupText(entries: { created_at: string; body: string }[]): string {
-  if (entries.length === 0) return ''
-
-  const blocks = entries.map(e => `${timeOf(e.created_at)}\n${e.body}`)
-  return `${plainDate(entries[0].created_at)}\n\n${blocks.join('\n\n')}`
+  return entries.map(copyText).join('\n\n')
 }
 
 export function visible(entries: LogEntry[]): LogEntry[] {
