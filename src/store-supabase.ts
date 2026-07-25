@@ -1,0 +1,161 @@
+import { createClient, type Session } from '@supabase/supabase-js'
+import type { LogEntry } from './timeline'
+import type { Index, Store, View } from './store'
+import { TRASH_DAYS } from './store'
+import { extractTags } from './tags'
+import { matches } from './search'
+import { monthRange, dayRange, daysAgo } from './calendar'
+import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
+
+const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
+
+/**
+ * 진짜 저장소. 부르는 쪽은 이 안을 몰라도 된다.
+ *
+ * 본문 암호화가 여기 있는 이유: 밖에서 평문만 오가야 저장소를 갈아끼울 수 있다.
+ * 키는 Supabase 가 아니라 우리 함수(/api/key)가 내준다 — 열쇠를 자물쇠 옆에 두지 않는다.
+ */
+export function supabaseStore(): Store {
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
+  let key: CryptoKey | null = null
+  let channel: ReturnType<typeof sb.channel> | null = null
+
+  const seal = (plain: string) => encrypt(plain, key!)
+
+  /** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
+  const unseal = (rows: LogEntry[]) => Promise.all(rows.map(async e => {
+    if (!isEncrypted(e.body)) return e   // 마이그레이션 전 평문
+    try {
+      return { ...e, body: await decrypt(e.body, key!) }
+    } catch {
+      return { ...e, body: '⚠️ 복호화하지 못했습니다' }
+    }
+  }))
+
+  async function fetchKey(token: string): Promise<CryptoKey> {
+    const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error(`키를 받지 못했다 (${res.status})`)
+    const { key: raw } = await res.json() as { key: string }
+    return importKey(raw)
+  }
+
+  const redirect = () => location.origin + location.pathname
+
+  return {
+    async session() {
+      const { data: { session } } = await sb.auth.getSession()
+      if (!session) { key = null; return null }
+
+      const token = (session as Session).access_token
+      key = await fetchKey(token)          // 키가 없으면 본문을 읽을 수도 쓸 수도 없다
+      sb.realtime.setAuth(token)
+      return { email: (session as Session).user.email ?? '' }
+    },
+    onAuth(fn) { sb.auth.onAuthStateChange(() => { fn() }) },
+
+    async signInGoogle() {
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: redirect() },
+      })
+      return error?.message ?? null
+    },
+    async signInEmail(email: string) {
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirect() },
+      })
+      return error?.message ?? null
+    },
+    async signOut() { await sb.auth.signOut() },
+
+    async index(): Promise<Index> {
+      const { data, error } = await sb.from('entries')
+        .select('created_at, tags').is('deleted_at', null)
+      if (error) throw new Error(error.message)
+
+      const { count } = await sb.from('entries')
+        .select('id', { count: 'exact', head: true })
+        .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
+
+      const rows = data ?? []
+      return {
+        dates: rows.map(r => r.created_at as string),
+        tags: rows.map(r => (r.tags ?? []) as string[]),
+        trashCount: count ?? 0,
+      }
+    },
+
+    async list(view: View): Promise<LogEntry[]> {
+      if (view.kind === 'trash') {
+        const { data, error } = await sb.from('entries')
+          .select('*')
+          .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
+          .order('deleted_at', { ascending: false })
+        if (error) throw new Error(error.message)
+        return unseal((data ?? []) as LogEntry[])
+      }
+
+      let q = sb.from('entries').select('*').is('deleted_at', null)
+      if (view.kind === 'month') {
+        const { from, to } = monthRange(view.year, view.month)
+        q = q.gte('created_at', from).lt('created_at', to)
+      } else if (view.kind === 'day') {
+        const { from, to } = dayRange(view.year, view.month, view.day)
+        q = q.gte('created_at', from).lt('created_at', to)
+      } else if (view.kind === 'tag') {
+        q = q.contains('tags', [view.tag])
+      }
+      // 검색은 거르지 않고 전량 받는다 — 서버가 보는 건 암호문뿐이라 ILIKE 를 쓸 수 없다
+
+      const { data, error } = await q.order('created_at', { ascending: true })
+      if (error) throw new Error(error.message)
+
+      const rows = await unseal((data ?? []) as LogEntry[])
+      return view.kind === 'search' ? rows.filter(e => matches(e.body, view.q)) : rows
+    },
+
+    async add(body: string, meta: string | null) {
+      // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
+      const { error } = await sb.from('entries')
+        .insert({ body: await seal(body), tags: extractTags(body), meta: meta && await seal(meta) })
+      if (error) throw new Error(error.message)
+    },
+    async edit(id: string, body: string) {
+      const { error } = await sb.from('entries')
+        .update({ body: await seal(body), tags: extractTags(body) }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    async setTags(id: string, tags: string[]) {
+      const { error } = await sb.from('entries').update({ tags }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    async trash(id: string) {
+      const { error } = await sb.from('entries')
+        .update({ deleted_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    async restore(id: string) {
+      const { error } = await sb.from('entries').update({ deleted_at: null }).eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+    async purge(id: string) {
+      const { error } = await sb.from('entries').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+
+    watch(fn) {
+      if (!channel) {
+        channel = sb.channel('entries-sync')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, () => fn())
+          .subscribe()
+      }
+      return () => {
+        if (!channel) return
+        sb.removeChannel(channel)
+        channel = null
+      }
+    },
+  }
+}

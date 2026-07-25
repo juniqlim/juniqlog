@@ -29,6 +29,21 @@ const TOKEN = new RegExp([
 const BULLET = /^(\s*)[-*]\s+(.*)$/u
 const NUMBER = /^(\s*)(\d+)\.\s+(.*)$/u
 
+/**
+ * 손으로 적어 넣는 태그를 거른다.
+ *
+ * 본문에서 뽑히는 것과 같은 모양만 받는다 — 태그는 사이드바에 그대로 그려지고
+ * 암호화도 되지 않는다. 꾸밈글자가 섞이면 그게 화면에서 살아난다.
+ */
+export function isTag(value: string): boolean {
+  return /^#?[0-9A-Za-z가-힣_]+$/u.test(value)
+}
+
+/** # 을 붙여 적었어도 알맹이만 남긴다 */
+export function bareTag(value: string): string {
+  return value.replace(/^#/, '')
+}
+
 export function extractTags(body: string): string[] {
   const found: string[] = []
   for (const m of body.matchAll(TAG)) {

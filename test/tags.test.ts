@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractTags, parseBody, parseLines } from '../src/tags'
+import { extractTags, parseBody, parseLines, isTag } from '../src/tags'
 
 
 describe('parseLines', () => {
@@ -136,5 +136,31 @@ describe('parseBody', () => {
       { type: 'link', value: 'https://example.com' },
       { type: 'text', value: '.' },
     ])
+  })
+})
+
+describe('isTag', () => {
+  it('본문에서 뽑히는 것과 같은 모양만 태그다', () => {
+    expect(isTag('일기')).toBe(true)
+    expect(isTag('todo_2')).toBe(true)
+    expect(isTag('한글Mixed_9')).toBe(true)
+  })
+
+  it('# 을 붙여 적어도 받아준다 — 사람이 그렇게 쓴다', () => {
+    expect(isTag('#일기')).toBe(true)
+  })
+
+  it('앞뒤 공백은 태그가 아니다', () => {
+    expect(isTag(' 일기')).toBe(false)
+    expect(isTag('두 단어')).toBe(false)
+    expect(isTag('')).toBe(false)
+    expect(isTag('#')).toBe(false)
+  })
+
+  it('꾸밈글자는 받지 않는다 — 태그는 화면에 그대로 그려진다', () => {
+    expect(isTag('<img src=x onerror=alert(1)>')).toBe(false)
+    expect(isTag('<b>')).toBe(false)
+    expect(isTag('"')).toBe(false)
+    expect(isTag('a&b')).toBe(false)
   })
 })

@@ -1,32 +1,20 @@
-import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
 import {
-  timeOf, dateOf, copyText, copyGroupText, groupByDate, tagsOf,
+  timeOf, copyText, copyGroupText, groupByDate, tagsOf,
   type LogEntry, type TagCount,
 } from './timeline'
-import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './calendar'
-
-/** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
-const TRASH_DAYS = 7
-import { extractTags, parseLines, type Piece } from './tags'
-import { isSearchable, matches } from './search'
+import { treeOf, today, type YearNode } from './calendar'
+import { headingText } from './heading'
+import { parseLines, isTag, bareTag, type Piece } from './tags'
+import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
 import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
-import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
+import { TRASH_DAYS, type Store, type View } from './store'
+import { pickStore } from './store-pick'
 
-const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
-
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
-
-/** 무엇을 보고 있는가 — 달 단위 또는 태그 단위 */
-type View =
-  | { kind: 'month'; year: number; month: number }
-  | { kind: 'day'; year: number; month: number; day: number }
-  | { kind: 'tag'; tag: string }
-  | { kind: 'search'; q: string }
-  | { kind: 'trash' }
+/** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
+const store: Store = pickStore()
 
 const TABS = [
   { id: 'date', label: '날짜' },
@@ -43,22 +31,17 @@ let tab: TabId = 'date'
 let trashCount = 0
 let openYears = new Set<number>()
 let openMonths = new Set<string>()
-let channel: ReturnType<typeof sb.channel> | null = null
-let noteKey: CryptoKey | null = null
+let unwatch: (() => void) | null = null
 
 const $ = (id: string) => document.getElementById(id)!
 
-/* ---- 본문 암호화 ---- */
-
-/** 키는 Supabase가 아니라 Vercel에 있다. 로그인한 본인에게만 내준다 */
-async function fetchKey(token: string): Promise<CryptoKey> {
-  const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
-  if (!res.ok) throw new Error(`키를 받지 못했다 (${res.status})`)
-  const { key } = await res.json() as { key: string }
-  return importKey(key)
+/** 글자는 글자로 넣는다 — 붙이는 값이 HTML 로 해석될 여지를 없앤다 */
+function span(className: string, text: string): HTMLSpanElement {
+  const el = document.createElement('span')
+  if (className) el.className = className
+  el.textContent = text
+  return el
 }
-
-const seal = (body: string) => encrypt(body, noteKey!)
 
 /* ---- 글을 쓴 정황 ---- */
 
@@ -95,89 +78,60 @@ function networkType(): string | null {
   return conn?.type ?? conn?.effectiveType ?? null
 }
 
-/** 정황도 본문과 같은 키로 잠근다 */
-async function sealMeta(): Promise<string | null> {
+/** 글을 쓴 정황. 잠그는 일은 저장소 몫이라 여기서는 평문으로 넘긴다 */
+async function currentMeta(): Promise<string | null> {
   const fix = isFresh(lastFix, Date.now(), FIX_MAX_AGE)
     ? lastFix
     : await locate(FIX_WAIT)   // 오래됐으면 새로 받는다. 못 받으면 위치 없이 간다
 
-  const meta = buildMeta(
+  return buildMeta(
     fix,
     Intl.DateTimeFormat().resolvedOptions().timeZone,
     deviceOf(navigator.userAgent),
     networkType(),
   )
-  return meta === null ? null : seal(meta)
-}
-
-/** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
-async function unseal(rows: LogEntry[]): Promise<LogEntry[]> {
-  return Promise.all(rows.map(async e => {
-    if (!isEncrypted(e.body)) return e   // 마이그레이션 전 평문
-    try {
-      return { ...e, body: await decrypt(e.body, noteKey!) }
-    } catch {
-      return { ...e, body: '⚠️ 복호화하지 못했습니다' }
-    }
-  }))
-}
-
-/* ---- realtime ---- */
-function subscribe(token: string) {
-  if (channel) return
-  sb.realtime.setAuth(token)
-  channel = sb.channel('entries-sync')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'entries' }, () => refresh())
-    .subscribe()
-}
-
-function unsubscribe() {
-  if (!channel) return
-  sb.removeChannel(channel)
-  channel = null
 }
 
 /* ---- auth ---- */
 const showAuth = () => { $('auth').hidden = false; $('app').hidden = true }
 const showApp = () => { $('auth').hidden = true; $('app').hidden = false }
 
-async function refreshAuth() {
-  const { data: { session } } = await sb.auth.getSession()
-  if (!session) { noteKey = null; unsubscribe(); showAuth(); return }
+function stopWatching() {
+  unwatch?.()
+  unwatch = null
+}
 
-  const token = (session as Session).access_token
+async function refreshAuth() {
+  let who: { email: string } | null
   try {
-    noteKey = await fetchKey(token)
+    who = await store.session()
   } catch (e) {
     // 키가 없으면 본문을 읽을 수도 쓸 수도 없다. 반쯤 열린 앱을 보여주지 않는다
     console.error(e)
     $('authmsg').textContent = '암호화 키를 받지 못했습니다. 새로고침해 보세요.'
-    unsubscribe(); showAuth(); return
+    stopWatching(); showAuth(); return
   }
-  showApp(); trackLocation(); await refresh(); subscribe(token)
+  if (!who) { stopWatching(); showAuth(); return }
+
+  showApp(); trackLocation(); await refresh()
+  unwatch ??= store.watch(() => { void refresh() })
 }
-sb.auth.onAuthStateChange(() => { refreshAuth() })
+store.onAuth(() => { void refreshAuth() })
 
 $('google').onclick = async () => {
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: location.origin + location.pathname },
-  })
-  if (error) $('authmsg').textContent = '오류: ' + error.message
+  const error = await store.signInGoogle()
+  if (error) $('authmsg').textContent = '오류: ' + error
 }
 
 $('login').onclick = async () => {
   const email = ($('email') as HTMLInputElement).value.trim()
   if (!email) return
   $('authmsg').textContent = '전송 중…'
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: location.origin + location.pathname },
-  })
-  $('authmsg').textContent = error ? '오류: ' + error.message : '메일함을 확인해 링크를 누르세요.'
+  const error = await store.signInEmail(email)
+  $('authmsg').textContent = error ? '오류: ' + error : '메일함을 확인해 링크를 누르세요.'
 }
 
-const signOut = async () => { await sb.auth.signOut() }
+const signOut = async () => { await store.signOut() }
 
 /* ---- data ---- */
 function todayView(): View {
@@ -189,57 +143,23 @@ const isToday = (v: View) =>
 
 /** 사이드바 재료(전체 날짜·태그)를 다시 읽는다 */
 async function loadIndex() {
-  const { data, error } = await sb.from('entries')
-    .select('created_at, tags').is('deleted_at', null)
-  if (error) { console.error(error); return }
-  const { count } = await sb.from('entries')
-    .select('id', { count: 'exact', head: true })
-    .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
-  trashCount = count ?? 0
-
-  const rows = data ?? []
-  tree = treeOf(rows.map(r => r.created_at as string))
-  tags = tagsOf(rows.map(r => ({ tags: (r.tags ?? []) as string[] })))
+  const idx = await store.index()
+  trashCount = idx.trashCount
+  tree = treeOf(idx.dates)
+  tags = tagsOf(idx.tags.map(t => ({ tags: t })))
   if (!view) view = todayView()
   if (view.kind === 'month' || view.kind === 'day') openYears.add(view.year)
   if (view.kind === 'day') openMonths.add(`${view.year}-${view.month}`)
 }
 
-async function loadEntries() {
-  if (!view) view = thisMonth()
-
-  if (view.kind === 'trash') {
-    const { data, error } = await sb.from('entries')
-      .select('*')
-      .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
-      .order('deleted_at', { ascending: false })
-    if (error) { console.error(error); return }
-    entries = await unseal((data ?? []) as LogEntry[])
+async function refresh() {
+  try {
+    await loadIndex()
+    entries = await store.list(view ?? todayView())
+  } catch (e) {
+    console.error(e)
     return
   }
-
-  let q = sb.from('entries').select('*').is('deleted_at', null)
-  if (view.kind === 'month') {
-    const { from, to } = monthRange(view.year, view.month)
-    q = q.gte('created_at', from).lt('created_at', to)
-  } else if (view.kind === 'day') {
-    const { from, to } = dayRange(view.year, view.month, view.day)
-    q = q.gte('created_at', from).lt('created_at', to)
-  } else if (view.kind === 'tag') {
-    q = q.contains('tags', [view.tag])
-  }
-  // 검색은 거르지 않고 전량 받는다 — 서버가 보는 건 암호문뿐이라 ILIKE를 쓸 수 없다
-
-  const { data, error } = await q.order('created_at', { ascending: true })
-  if (error) { console.error(error); return }
-
-  const rows = await unseal((data ?? []) as LogEntry[])
-  entries = view.kind === 'search' ? rows.filter(e => matches(e.body, view.q)) : rows
-}
-
-async function refresh() {
-  await loadIndex()
-  await loadEntries()
   renderAll()
   scrollToLatest()
 }
@@ -259,12 +179,9 @@ async function submit() {
   // 먼저 비웠다가 전송이 실패하면 글이 그대로 사라진다.
   sending = true
   try {
-    // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
-    const { error } = await sb.from('entries')
-      .insert({ body: await seal(body), tags: extractTags(body), meta: await sealMeta() })
-    if (error) throw new Error(error.message)
+    await store.add(body, await currentMeta())
   } catch (e) {
-    // 네트워크가 끊기면 insert 는 예외를 던진다. 잡지 않으면 알림도 없이 사라진다
+    // 네트워크가 끊기면 예외가 난다. 잡지 않으면 알림도 없이 사라진다
     console.error(e)
     alert(`저장하지 못했습니다. 글은 그대로 두었습니다.\n\n${(e as Error).message}`)
     return
@@ -281,17 +198,16 @@ async function submit() {
 async function addTag(entry: LogEntry, tag: string) {
   const tagged = withTag(entry, tag)
   if (tagged.tags.length === entry.tags.length) return
-  const { error } = await sb.from('entries').update({ tags: tagged.tags }).eq('id', entry.id)
-  if (error) { console.error(error); return }
+  try {
+    await store.setTags(entry.id, tagged.tags)
+  } catch (e) { console.error(e); return }
   await refresh()
 }
 
 async function saveEdit(entry: LogEntry, body: string) {
   if (body.trim() === '' || body === entry.body) return
   try {
-    const { error } = await sb.from('entries')
-      .update({ body: await seal(body), tags: extractTags(body) }).eq('id', entry.id)
-    if (error) throw new Error(error.message)
+    await store.edit(entry.id, body)
   } catch (e) {
     // 실패해도 수정창은 그대로 둔다 — 고친 내용을 잃지 않는다
     console.error(e)
@@ -302,24 +218,25 @@ async function saveEdit(entry: LogEntry, body: string) {
 }
 
 async function restoreEntry(entry: LogEntry) {
-  const { error } = await sb.from('entries')
-    .update({ deleted_at: null }).eq('id', entry.id)
-  if (error) { console.error(error); return }
+  try {
+    await store.restore(entry.id)
+  } catch (e) { console.error(e); return }
   await refresh()
 }
 
 async function purgeEntry(entry: LogEntry) {
   if (!confirm('완전히 지웁니다. 되돌릴 수 없습니다.')) return
-  const { error } = await sb.from('entries').delete().eq('id', entry.id)
-  if (error) { console.error(error); return }
+  try {
+    await store.purge(entry.id)
+  } catch (e) { console.error(e); return }
   await refresh()
 }
 
 async function removeEntry(entry: LogEntry) {
   if (!confirm('이 로그를 지울까요? (데이터는 남습니다)')) return
-  const { error } = await sb.from('entries')
-    .update({ deleted_at: new Date().toISOString() }).eq('id', entry.id)
-  if (error) { console.error(error); return }
+  try {
+    await store.trash(entry.id)
+  } catch (e) { console.error(e); return }
   await refresh()
 }
 
@@ -468,7 +385,12 @@ function renderTagList(box: HTMLElement) {
     const on = view?.kind === 'tag' && view.tag === tag
     const b = document.createElement('button')
     b.className = 'yr' + (on ? ' on' : '')
-    b.innerHTML = `<span class="caret">#</span><span>${tag}</span><span class="cnt">${count}</span>`
+    // 태그는 저장된 값 그대로다 — 글자로만 넣는다. 검증을 지나쳐 들어온 것이 있어도 살아나지 않게
+    b.append(
+      span('caret', '#'),
+      span('', tag),
+      span('cnt', String(count)),
+    )
     b.onclick = () => pick({ kind: 'tag', tag })
     box.appendChild(b)
   }
@@ -535,35 +457,26 @@ function renderAll() {
 }
 
 function renderHeading() {
-  const fb = $('filter')
-  if (!view) { fb.hidden = true; return }
-  fb.hidden = false
-  const pad = (n: number) => String(n).padStart(2, '0')
+  const title = $('htitle')
+  const act = $('hact')
+  act.textContent = ''
+  if (!view) { title.textContent = ''; return }
 
-  fb.textContent = ''
-  const label = document.createElement('span')
-  if (view.kind === 'trash') label.textContent = `휴지통 · 최근 ${TRASH_DAYS}일 · ${entries.length}건`
-  else if (view.kind === 'search') label.textContent = `검색 “${view.q}” · ${entries.length}건`
-  else if (view.kind === 'tag') label.innerHTML = `태그 <b>#${view.tag}</b> 모아보기`
-  else if (view.kind === 'day')
-    label.innerHTML = `<b>${dateOf(new Date(view.year, view.month - 1, view.day).toISOString())}</b>`
-  else label.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
-  fb.appendChild(label)
+  title.textContent = headingText(view, entries.length, TRASH_DAYS)
 
   // day 뷰는 목록 머리말을 숨기므로 그날 전체 복사를 여기에 둔다
   if (view.kind === 'day' && entries.length > 0) {
     const all = document.createElement('button')
     all.className = 'act dcopy'; all.title = '이 날 전체 복사'; all.textContent = '⧉'
     all.onclick = ev => copyGroup(entries, ev.currentTarget as HTMLElement)
-    fb.appendChild(all)
+    act.appendChild(all)
   }
 
   if (isToday(view)) return
-  fb.append(' · ')
   const back = document.createElement('a')
   back.textContent = '오늘'
   back.onclick = () => pick(todayView())
-  fb.appendChild(back)
+  act.appendChild(back)
 }
 
 function renderTimeline() {
@@ -617,7 +530,10 @@ function renderTimeline() {
         el.querySelector<HTMLElement>('.del')!.onclick = () => removeEntry(e)
         el.querySelector<HTMLElement>('.tag')!.onclick = () => {
           const t = prompt('태그')?.trim()
-          if (t) addTag(e, t)
+          if (!t) return
+          // 본문에서 뽑히는 것과 같은 모양만 받는다. 태그는 잠기지 않고 그대로 그려진다
+          if (!isTag(t)) { alert('태그에는 글자·숫자·밑줄만 쓸 수 있습니다.'); return }
+          addTag(e, bareTag(t))
         }
         el.querySelector<HTMLElement>('.copy')!.onclick = ev => copyEntry(e, ev.currentTarget as HTMLElement)
       }
