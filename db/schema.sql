@@ -24,6 +24,22 @@ create policy "own entries" on public.entries for all
 alter table public.entries
   add column if not exists deleted_at timestamptz;
 
+-- 마지막으로 고친 시각. null 이면 쓴 뒤로 손대지 않았다는 뜻이라 그대로 둔다.
+-- 앱이 빠뜨릴 수 없도록 트리거로 찍는다 — 스크립트나 대시보드로 고쳐도 남는다.
+alter table public.entries
+  add column if not exists updated_at timestamptz;
+
+create or replace function public.touch_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end $$;
+
+drop trigger if exists entries_touch on public.entries;
+create trigger entries_touch before update on public.entries
+  for each row execute function public.touch_updated_at();
+
 -- 글을 쓴 정황. 본문과 같은 DEK 로 암호화해서 넣는다.
 --   {"loc":{"lat":..,"lon":..,"acc":..},"tz":"Asia/Seoul","dev":"iPhone","net":"wifi"}
 -- 한 덩어리로 두면 항목을 늘려도 스키마를 건드릴 일이 없다.

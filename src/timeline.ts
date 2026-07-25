@@ -2,6 +2,8 @@ export interface LogEntry {
   id: string
   body: string
   created_at: string
+  /** 고친 적 없으면 null. DB 트리거가 찍는다 */
+  updated_at: string | null
   tags: string[]
   deleted_at: string | null
   /** 암호화된 정황(위치·타임존·기기). 남길 게 없었으면 null */
