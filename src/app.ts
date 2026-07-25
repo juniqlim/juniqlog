@@ -1,6 +1,9 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
-import { timeOf, dateOf, copyText, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
+import {
+  timeOf, dateOf, copyText, copyGroupText, groupByDate, tagsOf,
+  type LogEntry, type TagCount,
+} from './timeline'
 import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './calendar'
 
 /** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
@@ -270,9 +273,9 @@ async function removeEntry(entry: LogEntry) {
 }
 
 /** 눌렀는지 알 수 있게 잠깐 체크로 바꾼다 — 클립보드는 눈에 보이지 않는다 */
-async function copyEntry(entry: LogEntry, btn: HTMLElement) {
+async function copyToClipboard(text: string, btn: HTMLElement) {
   try {
-    await navigator.clipboard.writeText(copyText(entry))
+    await navigator.clipboard.writeText(text)
   } catch (e) {
     console.error(e)
     alert('복사하지 못했습니다')
@@ -282,6 +285,9 @@ async function copyEntry(entry: LogEntry, btn: HTMLElement) {
   btn.textContent = '✓'
   setTimeout(() => { btn.textContent = mark }, 1200)
 }
+
+const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry), btn)
+const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list), btn)
 
 /* ---- sidebar ---- */
 const openSidebar = (on: boolean) => {
@@ -486,6 +492,14 @@ function renderHeading() {
   else label.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
   fb.appendChild(label)
 
+  // day 뷰는 목록 머리말을 숨기므로 그날 전체 복사를 여기에 둔다
+  if (view.kind === 'day' && entries.length > 0) {
+    const all = document.createElement('button')
+    all.className = 'act dcopy'; all.title = '이 날 전체 복사'; all.textContent = '⧉'
+    all.onclick = ev => copyGroup(entries, ev.currentTarget as HTMLElement)
+    fb.appendChild(all)
+  }
+
   if (isToday(view)) return
   fb.append(' · ')
   const back = document.createElement('a')
@@ -513,7 +527,13 @@ function renderTimeline() {
   for (const group of groupByDate(entries)) {
     if (showDates) {
       const head = document.createElement('div')
-      head.className = 'datehead'; head.textContent = group.date
+      head.className = 'datehead'
+      const label = document.createElement('span')
+      label.textContent = group.date
+      const all = document.createElement('button')
+      all.className = 'act dcopy'; all.title = '이 날 전체 복사'; all.textContent = '⧉'
+      all.onclick = ev => copyGroup(group.entries, ev.currentTarget as HTMLElement)
+      head.append(label, all)
       tl.appendChild(head)
     }
 

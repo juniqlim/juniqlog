@@ -26,3 +26,16 @@ alter table public.entries
 
 create index if not exists entries_user_created
   on public.entries (user_id, created_at desc);
+
+-- 본문을 여는 키(DEK)를 사용자마다 하나씩. KEK 로 감싼 채로 둔다.
+-- KEK 는 Vercel 환경변수(NOTE_KEK)에만 있어서, 이 테이블이 통째로
+-- 유출돼도 여는 열쇠가 여기엔 없다.
+create table if not exists public.user_keys (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  wrapped_dek text not null,
+  created_at timestamptz not null default now()
+);
+
+-- 브라우저는 이 테이블을 건드릴 일이 없다. /api/key 가 service_role 로만 읽는다.
+alter table public.user_keys enable row level security;
+revoke all on public.user_keys from anon, authenticated;

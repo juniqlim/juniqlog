@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { timeOf, dateOf, copyText, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
+import { timeOf, dateOf, copyText, copyGroupText, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
 
 
 describe('tagsOf', () => {
@@ -58,6 +58,30 @@ describe('copyText', () => {
     const entry = { created_at: '2026-07-24T09:05:07', body: '할 일\n- 하나\n- 둘' }
 
     expect(copyText(entry)).toBe('2026. 7. 24. 09:05:07\n할 일\n- 하나\n- 둘')
+  })
+})
+
+
+describe('copyGroupText', () => {
+  it('그날 글을 시각과 함께 이어 붙인다', () => {
+    const entries = [
+      { created_at: '2026-07-24T09:05:07', body: '아침' },
+      { created_at: '2026-07-24T14:32:07', body: '점심' },
+    ]
+
+    expect(copyGroupText(entries)).toBe(
+      '2026. 7. 24.\n\n09:05:07\n아침\n\n14:32:07\n점심',
+    )
+  })
+
+  it('한 건이면 그것만 넣는다', () => {
+    const entries = [{ created_at: '2026-07-24T09:05:07', body: '아침' }]
+
+    expect(copyGroupText(entries)).toBe('2026. 7. 24.\n\n09:05:07\n아침')
+  })
+
+  it('빈 목록이면 빈 문자열이다', () => {
+    expect(copyGroupText([])).toBe('')
   })
 })
 
