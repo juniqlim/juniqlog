@@ -7,6 +7,7 @@ import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './c
 const TRASH_DAYS = 7
 import { extractTags, parseLines, type Piece } from './tags'
 import { isSearchable, matches } from './search'
+import { isSubmit, isCancel } from './input'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
@@ -291,7 +292,7 @@ function renderSearchBox(box: HTMLElement) {
   input.placeholder = '검색어'
   input.value = view?.kind === 'search' ? view.q : ''
   input.onkeydown = e => {
-    if (e.key !== 'Enter') return
+    if (!isSubmit(e)) return
     const q = input.value
     if (isSearchable(q)) pick({ kind: 'search', q })
   }
@@ -401,8 +402,8 @@ function startEdit(box: HTMLElement, entry: LogEntry) {
 
   const cancel = () => { box.textContent = ''; renderBody(box, entry.body) }
   ta.onkeydown = e => {
-    if (e.key === 'Escape') { e.preventDefault(); cancel() }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(entry, ta.value) }
+    if (isCancel(e)) { e.preventDefault(); cancel() }
+    if (isSubmit(e)) { e.preventDefault(); saveEdit(entry, ta.value) }
   }
 }
 
@@ -522,7 +523,7 @@ function renderTimeline() {
 $('send').onclick = submit
 const ta = $('input') as HTMLTextAreaElement
 ta.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+  if (isSubmit(e)) { e.preventDefault(); submit() }
 })
 ta.addEventListener('input', () => {
   ta.style.height = '42px'
