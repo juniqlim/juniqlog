@@ -567,4 +567,9 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && !$('app').hidden) refresh()
 })
 
+// 앱 껍데기를 캐시해 연결이 없어도 뜨게 한다. 개발 중에는 방해만 되므로 걸지 않는다
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(e => console.error('SW 등록 실패', e))
+}
+
 refreshAuth()
