@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { treeOf, monthRange, dayRange, latestMonth, daysAgo } from '../src/calendar'
+import { treeOf, monthRange, dayRange, latestMonth, daysAgo, today } from '../src/calendar'
+
+
+describe('today', () => {
+  it('기준 시각의 연·월·일을 낸다', () => {
+    expect(today(new Date(2026, 6, 25, 14, 30))).toEqual({ year: 2026, month: 7, day: 25 })
+  })
+
+  it('월을 1부터 센다', () => {
+    expect(today(new Date(2026, 0, 1))).toEqual({ year: 2026, month: 1, day: 1 })
+  })
+})
 
 
 describe('daysAgo', () => {

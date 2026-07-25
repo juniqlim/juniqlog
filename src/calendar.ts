@@ -13,6 +13,14 @@ export interface YearMonth {
   month: number
 }
 
+export interface YearMonthDay extends YearMonth {
+  day: number
+}
+
+export function today(now: Date): YearMonthDay {
+  return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() }
+}
+
 const asc = (a: number, b: number) => a - b
 
 export function treeOf(isos: string[]): YearNode[] {

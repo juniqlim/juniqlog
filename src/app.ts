@@ -1,7 +1,7 @@
 import { createClient, type Session } from '@supabase/supabase-js'
 import { addTag as withTag } from './entry'
 import { timeOf, groupByDate, tagsOf, type LogEntry, type TagCount } from './timeline'
-import { treeOf, monthRange, dayRange, latestMonth, daysAgo, type YearNode } from './calendar'
+import { treeOf, monthRange, dayRange, today, daysAgo, type YearNode } from './calendar'
 
 /** 휴지통은 최근 이 기간만 보여준다 (데이터는 지우지 않는다) */
 const TRASH_DAYS = 7
@@ -88,10 +88,12 @@ $('login').onclick = async () => {
 $('logout').onclick = async () => { await sb.auth.signOut() }
 
 /* ---- data ---- */
-function thisMonth(): View {
-  const now = new Date()
-  return { kind: 'month', year: now.getFullYear(), month: now.getMonth() + 1 }
+function todayView(): View {
+  return { kind: 'day', ...today(new Date()) }
 }
+
+const isToday = (v: View) =>
+  v.kind === 'day' && JSON.stringify(v) === JSON.stringify(todayView())
 
 /** 사이드바 재료(전체 날짜·태그)를 다시 읽는다 */
 async function loadIndex() {
@@ -106,11 +108,9 @@ async function loadIndex() {
   const rows = data ?? []
   tree = treeOf(rows.map(r => r.created_at as string))
   tags = tagsOf(rows.map(r => ({ tags: (r.tags ?? []) as string[] })))
-  if (!view) {
-    const latest = latestMonth(tree)
-    view = latest ? { kind: 'month', ...latest } : thisMonth()
-  }
+  if (!view) view = todayView()
   if (view.kind === 'month' || view.kind === 'day') openYears.add(view.year)
+  if (view.kind === 'day') openMonths.add(`${view.year}-${view.month}`)
 }
 
 async function loadEntries() {
@@ -161,7 +161,7 @@ async function submit() {
   ta.value = ''; ta.style.height = '42px'
   const { error } = await sb.from('entries').insert({ body, tags: extractTags(body) })
   if (error) { console.error(error); alert('저장 실패: ' + error.message); return }
-  view = thisMonth()
+  view = todayView()
   await refresh()
 }
 
@@ -395,30 +395,22 @@ function renderHeading() {
   if (!view) { fb.hidden = true; return }
   fb.hidden = false
   const pad = (n: number) => String(n).padStart(2, '0')
-  if (view.kind === 'trash') {
-    fb.textContent = ''
-    fb.append(`휴지통 · 최근 ${TRASH_DAYS}일 · ${entries.length}건 · `)
-    const back = document.createElement('a')
-    back.textContent = '이번 달로'
-    back.onclick = () => pick(thisMonth())
-    fb.appendChild(back)
-  } else if (view.kind === 'search') {
-    fb.textContent = ''
-    fb.append(`검색 “${view.q}” · ${entries.length}건 · `)
-    const back = document.createElement('a')
-    back.textContent = '이번 달로'
-    back.onclick = () => pick(thisMonth())
-    fb.appendChild(back)
-  } else if (view.kind === 'tag') {
-    fb.innerHTML = `태그 <b>#${view.tag}</b> 모아보기 · <a id="back">이번 달로</a>`
-    fb.querySelector<HTMLElement>('#back')!.onclick = () => pick(thisMonth())
-  } else if (view.kind === 'day') {
-    fb.innerHTML = `<b>${view.year}. ${pad(view.month)}. ${pad(view.day)}</b> · <a id="back">이 달 전체</a>`
-    fb.querySelector<HTMLElement>('#back')!.onclick = () =>
-      pick({ kind: 'month', year: (view as { year: number }).year, month: (view as { month: number }).month })
-  } else {
-    fb.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
-  }
+
+  fb.textContent = ''
+  const label = document.createElement('span')
+  if (view.kind === 'trash') label.textContent = `휴지통 · 최근 ${TRASH_DAYS}일 · ${entries.length}건`
+  else if (view.kind === 'search') label.textContent = `검색 “${view.q}” · ${entries.length}건`
+  else if (view.kind === 'tag') label.innerHTML = `태그 <b>#${view.tag}</b> 모아보기`
+  else if (view.kind === 'day') label.innerHTML = `<b>${view.year}. ${pad(view.month)}. ${pad(view.day)}</b>`
+  else label.innerHTML = `<b>${view.year}. ${pad(view.month)}</b>`
+  fb.appendChild(label)
+
+  if (isToday(view)) return
+  fb.append(' · ')
+  const back = document.createElement('a')
+  back.textContent = '오늘'
+  back.onclick = () => pick(todayView())
+  fb.appendChild(back)
 }
 
 function renderTimeline() {
