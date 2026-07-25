@@ -177,7 +177,7 @@ $('login').onclick = async () => {
   $('authmsg').textContent = error ? '오류: ' + error.message : '메일함을 확인해 링크를 누르세요.'
 }
 
-$('logout').onclick = async () => { await sb.auth.signOut() }
+const signOut = async () => { await sb.auth.signOut() }
 
 /* ---- data ---- */
 function todayView(): View {
@@ -381,6 +381,13 @@ function renderSidebar() {
   trash.innerHTML = `<span>휴지통</span><span class="cnt">${trashCount}</span>`
   trash.onclick = () => pick({ kind: 'trash' })
   el.appendChild(trash)
+
+  // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
+  const out = document.createElement('button')
+  out.className = 'trash out'
+  out.textContent = '로그아웃'
+  out.onclick = signOut
+  el.appendChild(out)
 }
 
 function renderSearchBox(box: HTMLElement) {
