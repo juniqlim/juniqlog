@@ -24,10 +24,12 @@ create policy "own entries" on public.entries for all
 alter table public.entries
   add column if not exists deleted_at timestamptz;
 
--- 글을 쓴 위치. 본문과 같은 DEK 로 암호화해서 넣는다({"lat":..,"lon":..,"acc":..}).
--- 서버가 걸러줄 일이 없어 평문으로 둘 이유가 없다 — 검색은 어차피 브라우저에서 한다.
+-- 글을 쓴 정황. 본문과 같은 DEK 로 암호화해서 넣는다.
+--   {"loc":{"lat":..,"lon":..,"acc":..},"tz":"Asia/Seoul","dev":"iPhone","net":"wifi"}
+-- 한 덩어리로 두면 항목을 늘려도 스키마를 건드릴 일이 없다.
+-- 서버가 걸러줄 일이 없어 평문으로 둘 이유도 없다 — 검색은 어차피 브라우저에서 한다.
 alter table public.entries
-  add column if not exists loc text;
+  add column if not exists meta text;
 
 create index if not exists entries_user_created
   on public.entries (user_id, created_at desc);

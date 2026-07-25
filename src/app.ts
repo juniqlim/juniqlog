@@ -12,7 +12,7 @@ import { extractTags, parseLines, type Piece } from './tags'
 import { isSearchable, matches } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
-import { isFresh, encodeFix, type Fix } from './geo'
+import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
@@ -60,7 +60,7 @@ async function fetchKey(token: string): Promise<CryptoKey> {
 
 const seal = (body: string) => encrypt(body, noteKey!)
 
-/* ---- 위치 ---- */
+/* ---- 글을 쓴 정황 ---- */
 
 /** 이보다 오래된 좌표는 쓰지 않는다 — 그 사이 움직였을 수 있다 */
 const FIX_MAX_AGE = 5 * 60_000
@@ -89,13 +89,25 @@ function locate(timeout: number): Promise<Fix | null> {
 /** 앱을 열 때 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다 */
 const trackLocation = () => { void locate(10_000) }
 
-/** 좌표도 본문과 같은 키로 잠근다 */
-async function sealLocation(): Promise<string | null> {
+/** 네트워크 종류는 크롬 계열만 알려준다. 없으면 그 항목만 빠진다 */
+function networkType(): string | null {
+  const conn = (navigator as { connection?: { effectiveType?: string; type?: string } }).connection
+  return conn?.type ?? conn?.effectiveType ?? null
+}
+
+/** 정황도 본문과 같은 키로 잠근다 */
+async function sealMeta(): Promise<string | null> {
   const fix = isFresh(lastFix, Date.now(), FIX_MAX_AGE)
     ? lastFix
     : await locate(FIX_WAIT)   // 오래됐으면 새로 받는다. 못 받으면 위치 없이 간다
 
-  return fix === null ? null : seal(encodeFix(fix))
+  const meta = buildMeta(
+    fix,
+    Intl.DateTimeFormat().resolvedOptions().timeZone,
+    deviceOf(navigator.userAgent),
+    networkType(),
+  )
+  return meta === null ? null : seal(meta)
 }
 
 /** 한 건이 깨져도 나머지는 보여준다 — 조용히 사라지는 것보다 낫다 */
@@ -249,7 +261,7 @@ async function submit() {
   try {
     // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
     const { error } = await sb.from('entries')
-      .insert({ body: await seal(body), tags: extractTags(body), loc: await sealLocation() })
+      .insert({ body: await seal(body), tags: extractTags(body), meta: await sealMeta() })
     if (error) throw new Error(error.message)
   } catch (e) {
     // 네트워크가 끊기면 insert 는 예외를 던진다. 잡지 않으면 알림도 없이 사라진다
