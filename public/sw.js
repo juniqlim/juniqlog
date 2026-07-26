@@ -5,7 +5,7 @@
  * 그 키가 기기에 남으면 로그아웃해도 열리는 상태가 된다.
  */
 
-const CACHE = 'juniqlog-shell-v1'
+const CACHE = 'thinkthink-shell-v1'
 
 self.addEventListener('install', () => self.skipWaiting())
 

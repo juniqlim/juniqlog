@@ -48,7 +48,7 @@ gpg --batch --pinentry-mode loopback --passphrase "$BACKUP_PASS" -d dump.sql.gpg
 ## 남은 작업
 
 1. **백업 암호 정하기** ← 여기서 멈춤. 아래 "결정 필요" 참고
-2. 프라이빗 repo `juniqlog-backup` 생성 (이 repo는 **PUBLIC**이라 백업을 여기 두면 안 된다)
+2. 프라이빗 repo `thinkthink-backup` 생성 (이 repo는 **PUBLIC**이라 백업을 여기 두면 안 된다)
 3. 백업 repo에 Actions Secrets 등록: `SUPABASE_PROJECT_REF`, `SUPABASE_DB_PASSWORD`, `BACKUP_PASS`
    - **public인 이 repo에는 아무것도 넣지 않는다.** 워크플로도 백업 repo에서 돌린다.
 4. 워크플로 작성 (`.github/workflows/backup.yml`)
@@ -62,7 +62,7 @@ gpg --batch --pinentry-mode loopback --passphrase "$BACKUP_PASS" -d dump.sql.gpg
 
 **백업 암호를 어떻게 정할지.** 이 암호를 잃으면 백업 전체가 영구히 못 열린다.
 
-- **A안 (추천)**: 랜덤 생성 → `~/.juniqlog-backup-pass` (권한 600)에 저장하고 GitHub Secret에 등록.
+- **A안 (추천)**: 랜덤 생성 → `~/.thinkthink-backup-pass` (권한 600)에 저장하고 GitHub Secret에 등록.
   화면·대화 로그 어디에도 안 남는다. 파일을 열어 비밀번호 관리자로 옮긴 뒤 파일을 지운다.
 - **B안**: 직접 정하고 `gh secret set`으로 직접 등록.
 
