@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isFresh, buildMeta, deviceOf, describeMeta, type Fix } from '../src/meta'
+import { isFresh, fixFrom, buildMeta, deviceOf, describeMeta, type Fix } from '../src/meta'
 
 const fix = (at: number): Fix => ({ lat: 37.4021, lon: 126.9227, acc: 30, at })
 
@@ -17,6 +17,24 @@ describe('isFresh', () => {
 
   it('받아둔 적 없으면 쓸 수 없다', () => {
     expect(isFresh(null, 0, 5 * MINUTE)).toBe(false)
+  })
+})
+
+
+describe('fixFrom', () => {
+  const position = (timestamp: number) => ({
+    coords: { latitude: 37.4021, longitude: 126.9227, accuracy: 30 },
+    timestamp,
+  })
+
+  it('좌표를 잰 시각을 적는다 — 받은 시각이 아니다', () => {
+    // 브라우저는 maximumAge 안이면 묵은 좌표를 즉시 돌려준다.
+    // 받은 시각을 적으면 그 나이만큼 신선하다고 잘못 믿는다
+    expect(fixFrom(position(4 * MINUTE)).at).toBe(4 * MINUTE)
+  })
+
+  it('좌표와 정확도를 그대로 옮긴다', () => {
+    expect(fixFrom(position(0))).toEqual({ lat: 37.4021, lon: 126.9227, acc: 30, at: 0 })
   })
 })
 

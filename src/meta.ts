@@ -13,8 +13,23 @@ export interface Fix {
   lat: number
   lon: number
   acc: number
-  /** 받아둔 시각 (epoch ms) */
+  /** 좌표를 잰 시각 (epoch ms) */
   at: number
+}
+
+export interface Position {
+  coords: { latitude: number; longitude: number; accuracy: number }
+  timestamp: number
+}
+
+/**
+ * 잰 시각을 그대로 옮긴다.
+ *
+ * 받은 시각을 적으면 안 된다 — maximumAge 안이면 브라우저가 묵은 좌표를
+ * 즉시 돌려주는데, 그것까지 방금 잰 것으로 세면 두 배까지 오래된 자리를 쓴다.
+ */
+export function fixFrom(p: Position): Fix {
+  return { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: p.timestamp }
 }
 
 export function isFresh(fix: Fix | null, now: number, maxAgeMs: number): boolean {

@@ -87,8 +87,8 @@ export function memoryStore(clock: () => Date = () => new Date()): Store {
       return alive().sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
     },
 
-    async add(body: string, meta: string | null) {
-      const at = now()
+    async add(body: string, meta: string | null, written?: string) {
+      const at = written ?? now()
       put({
         id: crypto.randomUUID(),
         body,

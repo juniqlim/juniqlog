@@ -9,7 +9,7 @@ import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
-import { isFresh, buildMeta, deviceOf, type Fix } from './meta'
+import { isFresh, fixFrom, buildMeta, deviceOf, type Fix } from './meta'
 import { buildBackup, deliver, readBackup } from './backup'
 import { plan } from './import'
 import { currentTheme, toggle, label, barColor, KEY, type Theme } from './theme'
@@ -63,7 +63,7 @@ function locate(timeout: number): Promise<Fix | null> {
   return new Promise(resolve => {
     navigator.geolocation.getCurrentPosition(
       p => {
-        lastFix = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, at: Date.now() }
+        lastFix = fixFrom(p)
         resolve(lastFix)
       },
       () => resolve(null),   // 거부했거나 못 받았다. 위치 없이 쓴다
@@ -72,8 +72,14 @@ function locate(timeout: number): Promise<Fix | null> {
   })
 }
 
-/** 앱을 열 때 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다 */
-const trackLocation = () => { void locate(10_000) }
+/**
+ * 화면을 열 때 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다.
+ * 아직 신선하면 그냥 쓴다. 열 때마다 받으면 배터리도 권한 표시도 값이 비싸다.
+ */
+const trackLocation = () => {
+  if (isFresh(lastFix, Date.now(), FIX_MAX_AGE)) return
+  void locate(10_000)
+}
 
 /** 네트워크 종류는 크롬 계열만 알려준다. 없으면 그 항목만 빠진다 */
 function networkType(): string | null {
@@ -180,9 +186,13 @@ async function submit() {
 
   // 서버가 받은 것을 확인하기 전에는 입력창을 비우지 않는다.
   // 먼저 비웠다가 전송이 실패하면 글이 그대로 사라진다.
+  // 누른 시각을 여기서 잡는다 — 위치를 기다리고 서버에 닿기까지 걸린 시간이
+  // 글에 얹히면 안 된다
+  const at = new Date().toISOString()
+
   sending = true
   try {
-    await store.add(body, await currentMeta())
+    await store.add(body, await currentMeta(), at)
   } catch (e) {
     // 네트워크가 끊기면 예외가 난다. 잡지 않으면 알림도 없이 사라진다
     console.error(e)

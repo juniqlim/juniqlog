@@ -46,6 +46,17 @@ describe('memoryStore — 쓰고 읽기', () => {
     expect(e.created_at).toBe('2026-07-25T10:00:00.000Z')
   })
 
+  it('쓴 시각을 받으면 그것을 남긴다 — 저장이 늦어도 누른 때로 남아야 한다', async () => {
+    const { store, set } = make()
+
+    set('2026-07-25T10:00:30Z')                       // 위치를 기다리는 사이 시계가 갔다
+    await store.add('첫 줄', null, '2026-07-25T10:00:00.000Z')
+
+    const [e] = await store.list(day)
+    expect(e.created_at).toBe('2026-07-25T10:00:00.000Z')
+    expect(e.updated_at).toBe('2026-07-25T10:00:00.000Z')   // 쓰자마자는 고친 적이 없다
+  })
+
   it('본문에서 태그를 뽑아 함께 담는다', async () => {
     const { store } = make()
     await store.add('뽀모도로 해볼까 #일기 #할일', null)

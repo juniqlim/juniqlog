@@ -137,10 +137,18 @@ export function supabaseStore(): Store {
       return unseal((data ?? []) as LogEntry[])
     },
 
-    async add(body: string, meta: string | null) {
+    async add(body: string, meta: string | null, at?: string) {
       // 태그는 평문에서 뽑아 평문으로 저장한다 (서버 태그 필터를 살리기 위해)
-      const { error } = await sb.from('entries')
-        .insert({ body: await seal(body), tags: extractTags(body), meta: meta && await seal(meta) })
+      const row: Record<string, unknown> = {
+        body: await seal(body),
+        tags: extractTags(body),
+        meta: meta && await seal(meta),
+      }
+      // 쓴 시각을 받았으면 그것으로 남긴다. 트리거는 update 에만 걸리므로
+      // updated_at 을 같이 적어야 쓰자마자 고친 것처럼 보이지 않는다
+      if (at !== undefined) { row.created_at = at; row.updated_at = at }
+
+      const { error } = await sb.from('entries').insert(row)
       if (error) throw new Error(error.message)
     },
     async insertMany(items: Exported[]) {

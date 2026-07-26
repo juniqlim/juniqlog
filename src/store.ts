@@ -39,7 +39,8 @@ export interface Store {
   /** 내보내기용 전량 — 버린 것은 빼고 쓴 순서대로 */
   all(): Promise<LogEntry[]>
 
-  add(body: string, meta: string | null): Promise<void>
+  /** at 은 쓴 시각. 주지 않으면 저장이 끝나는 시각으로 남는다 */
+  add(body: string, meta: string | null, at?: string): Promise<void>
   /** 내보낸 사본을 되돌린다 — 쓴 시각을 살려 넣는다 */
   insertMany(items: Exported[]): Promise<void>
   edit(id: string, body: string): Promise<void>
