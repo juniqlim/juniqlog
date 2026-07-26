@@ -62,24 +62,24 @@ describe('filesByDay', () => {
     expect(text.indexOf('아침')).toBeLessThan(text.indexOf('저녁'))
   })
 
-  it('머리말에 날짜와 요일을 적는다 — 파일 하나만 열어도 언제인지 안다', () => {
+  it('머리말은 일자 하나다 — 년·월은 이미 폴더가 말하고 있다', () => {
     const files = filesByDay(toExported([row()]), 'Asia/Seoul')
-    expect(files.get('2026/07/25.md')!.startsWith('# 2026-07-25 (토)')).toBe(true)
+    expect(files.get('2026/07/25.md')!.startsWith('# 25\n')).toBe(true)
   })
 
-  it('글마다 시각과 태그를 적는다', () => {
+  it('글마다 날짜와 시각과 태그를 적는다', () => {
     const files = filesByDay(toExported([
       row({ tags: ['일기', '산책'], body: '걸었다' }),
     ]), 'Asia/Seoul')
 
-    expect(files.get('2026/07/25.md')).toBe('# 2026-07-25 (토)\n\n## 14:30:00 #일기 #산책\n\n걸었다\n')
+    expect(files.get('2026/07/25.md')).toBe('# 25\n\n2026-07-25 14:30:00 #일기 #산책\n\n걸었다\n')
   })
 
-  it('정황이 있으면 머리말에 한 줄로 붙인다', () => {
+  it('정황이 있으면 그 줄에 한 줄로 붙인다', () => {
     const meta = JSON.stringify({ dev: 'iPhone', loc: { lat: 37.4, lon: 126.9 } })
     const files = filesByDay(toExported([row({ meta })]), 'Asia/Seoul')
 
-    expect(files.get('2026/07/25.md')).toContain('## 14:30:00 · iPhone · 37.4,126.9')
+    expect(files.get('2026/07/25.md')).toContain('2026-07-25 14:30:00 · iPhone · 37.4,126.9')
   })
 
   it('사는 곳과 같은 시간대는 적지 않는다 — 늘 같으면 줄만 길어진다', () => {

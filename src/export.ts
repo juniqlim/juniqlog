@@ -1,5 +1,5 @@
 // 확장자를 적는 이유: tools/export.ts 가 vite 없이 node 로 이 파일을 부른다
-import { DAYS, type LogEntry } from './timeline.ts'
+import { type LogEntry } from './timeline.ts'
 import { describeMeta } from './meta.ts'
 
 /**
@@ -44,9 +44,8 @@ export function filesByDay(items: Exported[], homeTz: string): Map<string, strin
 
   const files = new Map<string, string>()
   for (const [name, list] of days) {
-    const at = new Date(list[0].at)
-    const head = `# ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
-      + ` (${DAYS[at.getDay()]})`
+    // 머리말은 일자 하나다. 년·월은 폴더가 이미 말하고 있다
+    const head = `# ${new Date(list[0].at).getDate()}`
     files.set(name, `${head}\n\n${list.map(item => block(item, homeTz)).join('\n')}`)
   }
   return files
@@ -63,10 +62,9 @@ export function fileStamp(at: Date): string {
 
 function block(item: Exported, homeTz: string): string {
   const at = new Date(item.at)
-  const bits = [
-    `## ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`,
-    ...item.tags.map(t => '#' + t),
-  ]
+  const stamp = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
+    + ` ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`
+  const bits = [stamp, ...item.tags.map(t => '#' + t)]
 
   const context = describeMeta(item.meta === null ? null : JSON.stringify(item.meta), homeTz)
   if (context !== '') bits.push('·', context)
