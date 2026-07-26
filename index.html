@@ -59,6 +59,11 @@
   #app { display:flex; flex-direction:column; min-height:100vh; }
   #timeline { flex:1; width:100%; max-width:720px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
   .entry { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  /* 아직 못 보낸 글 — 자리는 지키되 올라간 글과 구별된다 */
+  .entry.pending { opacity:.55; border-style:dashed; }
+  .entry.pending.failed { opacity:1; border-color:var(--accent); }
+  .waiting { font-size:11px; color:var(--dim); }
+  .entry.failed .waiting { color:var(--accent); }
   .time { font-size:12px; color:var(--dim); }
   .head { display:flex; justify-content:space-between; align-items:center; }
   .meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }

@@ -9,6 +9,7 @@ import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
+import { enqueue, dequeue, markFailed, next, withPending, isPending, load, save, type Pending } from './queue'
 import { isFresh, fixFrom, buildMeta, deviceOf, type Fix } from './meta'
 import { buildBackup, deliver, readBackup } from './backup'
 import { plan } from './import'
@@ -87,11 +88,15 @@ function networkType(): string | null {
   return conn?.type ?? conn?.effectiveType ?? null
 }
 
-/** 글을 쓴 정황. 잠그는 일은 저장소 몫이라 여기서는 평문으로 넘긴다 */
-async function currentMeta(): Promise<string | null> {
-  const fix = isFresh(lastFix, Date.now(), FIX_MAX_AGE)
-    ? lastFix
-    : await locate(FIX_WAIT)   // 오래됐으면 새로 받는다. 못 받으면 위치 없이 간다
+/**
+ * 글을 쓴 정황. 잠그는 일은 저장소 몫이라 여기서는 평문으로 넘긴다.
+ *
+ * 기다리지 않는다 — 남기기를 누른 순간 알고 있는 좌표를 쓴다. 오래됐으면
+ * 위치 없이 간다. 나중에 받은 좌표를 붙이면 쓴 자리가 아니라 보낸 자리가 된다.
+ */
+function currentMeta(): string | null {
+  const fix = isFresh(lastFix, Date.now(), FIX_MAX_AGE) ? lastFix : null
+  if (fix === null) trackLocation()   // 다음 글에는 대어줄 수 있게
 
   return buildMeta(
     fix,
@@ -123,6 +128,7 @@ async function refreshAuth() {
   if (!who) { stopWatching(); showAuth(); return }
 
   showApp(); trackLocation(); await refresh()
+  void flush()   // 지난번에 못 보낸 글부터 치운다
   unwatch ??= store.watch(() => { void refresh() })
 }
 store.onAuth(() => { void refreshAuth() })
@@ -177,35 +183,65 @@ function scrollToLatest() {
   window.scrollTo({ top: document.body.scrollHeight })
 }
 
-let sending = false
+let queue: Pending[] = load(localStorage)
 
-async function submit() {
+/**
+ * 큐에 넣는 것으로 끝난다 — 보내는 일은 flush 가 뒤에서 한다.
+ *
+ * 누른 시각을 여기서 잡는다. 서버에 닿기까지 걸린 시간이 글에 얹히면 안 된다.
+ */
+function submit() {
   const ta = $('input') as HTMLTextAreaElement
   const body = ta.value
-  if (body.trim() === '' || sending) return
+  if (body.trim() === '') return
 
-  // 서버가 받은 것을 확인하기 전에는 입력창을 비우지 않는다.
-  // 먼저 비웠다가 전송이 실패하면 글이 그대로 사라진다.
-  // 누른 시각을 여기서 잡는다 — 위치를 기다리고 서버에 닿기까지 걸린 시간이
-  // 글에 얹히면 안 된다
-  const at = new Date().toISOString()
-
-  sending = true
-  try {
-    await store.add(body, await currentMeta(), at)
-  } catch (e) {
-    // 네트워크가 끊기면 예외가 난다. 잡지 않으면 알림도 없이 사라진다
-    console.error(e)
-    alert(`저장하지 못했습니다. 글은 그대로 두었습니다.\n\n${(e as Error).message}`)
-    return
-  } finally {
-    sending = false
-  }
+  queue = enqueue(queue, {
+    id: crypto.randomUUID(),
+    body,
+    meta: currentMeta(),
+    at: new Date().toISOString(),
+    failed: false,
+  })
+  save(queue, localStorage)
 
   ta.value = ''; ta.style.height = '42px'
   saveDraft('', localStorage)
   view = todayView()
-  await refresh()
+  renderAll()          // 대기 중인 채로 곧장 화면에 오른다
+  scrollToLatest()
+
+  void flush()
+}
+
+let flushing = false
+
+/**
+ * 큐를 앞에서부터 비운다.
+ *
+ * 하나가 실패하면 거기서 멈춘다 — 뒤엣것을 먼저 보내면 순서가 뒤집힌다.
+ * 실패한 글은 큐에 남는다. 빼는 순간 사라지기 때문이다.
+ */
+async function flush() {
+  if (flushing) return
+  flushing = true
+  try {
+    for (let item = next(queue); item !== null; item = next(queue)) {
+      try {
+        await store.add(item.body, item.meta, item.at)
+      } catch (e) {
+        console.error(e)
+        queue = markFailed(queue, item.id)
+        save(queue, localStorage)
+        renderAll()
+        return
+      }
+      queue = dequeue(queue, item.id)
+      save(queue, localStorage)
+    }
+    await refresh()   // 다 비웠다 — 서버에 오른 진짜 글로 바꿔 그린다
+  } finally {
+    flushing = false
+  }
 }
 
 async function addTag(entry: LogEntry, tag: string) {
@@ -589,7 +625,9 @@ function renderHeading() {
 function renderTimeline() {
   const tl = $('timeline')
   tl.innerHTML = ''
-  if (entries.length === 0) {
+  // 아직 못 보낸 글도 제자리에 얹는다 — 쓴 사람에게는 이미 남긴 글이다
+  const shown = withPending(entries, queue, view ?? todayView())
+  if (shown.length === 0) {
     const msg = view?.kind === 'trash' ? '휴지통이 비었습니다'
       : view?.kind === 'search' ? '찾는 로그가 없습니다'
       : view?.kind === 'tag' ? '이 태그의 로그가 없습니다'
@@ -602,7 +640,7 @@ function renderTimeline() {
   // 하루치만 보고 있으면 머리말이 이미 그 날짜다 — 두 번 쓰지 않는다
   const showDates = view?.kind !== 'day'
 
-  for (const group of groupByDate(entries)) {
+  for (const group of groupByDate(shown)) {
     if (showDates) {
       const head = document.createElement('div')
       head.className = 'datehead'
@@ -617,10 +655,15 @@ function renderTimeline() {
 
     for (const e of group.entries) {
       const el = document.createElement('div')
-      el.className = 'entry'
+      const waiting = isPending(e)
+      el.className = waiting ? `entry pending${e.failed ? ' failed' : ''}` : 'entry'
+      // 아직 서버에 없는 글은 고치거나 지울 수 없다 — 자리만 지키고 기다린다
       el.innerHTML = `<div class="head">
           <span class="meta"><span class="time">${timeOf(e.created_at)}</span></span>
-          <span class="actions">${inTrash
+          <span class="actions">${waiting
+            ? `<span class="waiting">${e.failed ? '못 보냄' : '보내는 중'}</span>
+               ${e.failed ? '<button class="act retry" title="다시 보내기">↻</button>' : ''}`
+            : inTrash
             ? `<button class="act back" title="복원">↩</button>
                <button class="act purge" title="완전 삭제">×</button>`
             : `<button class="act copy" title="복사">⧉</button>
@@ -630,7 +673,9 @@ function renderTimeline() {
           </span>
         </div>
         <div class="body"></div>`
-      if (inTrash) {
+      if (waiting) {
+        el.querySelector<HTMLElement>('.retry')?.addEventListener('click', () => { void flush() })
+      } else if (inTrash) {
         el.querySelector<HTMLElement>('.back')!.onclick = () => restoreEntry(e)
         el.querySelector<HTMLElement>('.purge')!.onclick = () => purgeEntry(e)
       } else {
@@ -656,7 +701,7 @@ function renderTimeline() {
 
       const box = el.querySelector<HTMLElement>('.body')!
       renderBody(box, e.body)
-      if (!inTrash) el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
+      if (!waiting && !inTrash) el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
       tl.appendChild(el)
     }
   }
@@ -684,7 +729,14 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden || $('app').hidden) return
   refresh()
   trackLocation()   // 다른 데 갔다 온 사이 움직였을 수 있다
+  void flush()      // 못 보낸 글이 남아 있을 수 있다
 })
+
+// 연결이 돌아오면 기다리지 않고 바로 보낸다
+window.addEventListener('online', () => { void flush() })
+
+/** 알림 없이 조용히 다시 시도한다 — 지하철에서 잠깐 끊긴 것뿐일 수 있다 */
+setInterval(() => { if (queue.length > 0) void flush() }, 30_000)
 
 // 앱 껍데기를 캐시해 연결이 없어도 뜨게 한다. 개발 중에는 방해만 되므로 걸지 않는다
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
