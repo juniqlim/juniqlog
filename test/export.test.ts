@@ -72,14 +72,15 @@ describe('filesByDay', () => {
       row({ tags: ['일기', '산책'], body: '걸었다' }),
     ]), 'Asia/Seoul')
 
-    expect(files.get('2026/07/25.md')).toBe('# 25\n\n2026-07-25 14:30:00 #일기 #산책\n\n걸었다\n')
+    // 머리말은 복사한 글과 같은 모양이다 — 두 군데서 다르게 읽힐 이유가 없다
+    expect(files.get('2026/07/25.md')).toBe('# 25\n\n2026. 7. 25. 14:30:00 #일기 #산책\n\n걸었다\n')
   })
 
   it('정황이 있으면 그 줄에 한 줄로 붙인다', () => {
     const meta = JSON.stringify({ dev: 'iPhone', loc: { lat: 37.4, lon: 126.9 } })
     const files = filesByDay(toExported([row({ meta })]), 'Asia/Seoul')
 
-    expect(files.get('2026/07/25.md')).toContain('2026-07-25 14:30:00 · iPhone · 37.4,126.9')
+    expect(files.get('2026/07/25.md')).toContain('2026. 7. 25. 14:30:00 · iPhone · 37.4,126.9')
   })
 
   it('사는 곳과 같은 시간대는 적지 않는다 — 늘 같으면 줄만 길어진다', () => {

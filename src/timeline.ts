@@ -46,10 +46,10 @@ export interface Copyable {
 }
 
 /**
- * 밖으로 옮겨 붙일 때는 언제 어디서 쓴 글인지가 함께 가야 한다.
- * 내보내기와 같은 것을 담는다 — 옮겨 붙였다고 정황이 빠질 이유가 없다.
+ * 글 위에 붙는 한 줄 — 언제 어디서 무엇으로 썼는가.
+ * 복사도 내보내기도 이것을 쓴다. 같은 글이 두 군데서 다르게 읽히면 안 된다.
  */
-export function copyText(entry: Copyable, homeTz: string): string {
+export function copyHead(entry: Copyable, homeTz: string): string {
   const bits = [
     `${plainDate(entry.created_at)} ${timeOf(entry.created_at)}`,
     ...(entry.tags ?? []).map(t => '#' + t),
@@ -61,7 +61,12 @@ export function copyText(entry: Copyable, homeTz: string): string {
     bits.push(`(수정 ${new Date(entry.updated_at).toLocaleString('ko-KR')})`)
   }
 
-  return `${bits.join(' ')}\n${entry.body}`
+  return bits.join(' ')
+}
+
+/** 밖으로 옮겨 붙일 때는 언제 어디서 쓴 글인지가 함께 가야 한다 */
+export function copyText(entry: Copyable, homeTz: string): string {
+  return `${copyHead(entry, homeTz)}\n${entry.body}`
 }
 
 /**

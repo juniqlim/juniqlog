@@ -1,6 +1,5 @@
 // 확장자를 적는 이유: tools/export.ts 가 vite 없이 node 로 이 파일을 부른다
-import { type LogEntry } from './timeline.ts'
-import { describeMeta } from './meta.ts'
+import { copyHead, type LogEntry } from './timeline.ts'
 
 /**
  * 내보낼 모양을 정한다. 어디로 떨구는지는 부르는 쪽 사정이다 —
@@ -61,16 +60,15 @@ export function fileStamp(at: Date): string {
 }
 
 function block(item: Exported, homeTz: string): string {
-  const at = new Date(item.at)
-  const stamp = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
-    + ` ${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`
-  const bits = [stamp, ...item.tags.map(t => '#' + t)]
+  const head = copyHead({
+    created_at: item.at,
+    updated_at: item.edited ?? item.at,
+    body: item.body,
+    tags: item.tags,
+    meta: item.meta === null ? null : JSON.stringify(item.meta),
+  }, homeTz)
 
-  const context = describeMeta(item.meta === null ? null : JSON.stringify(item.meta), homeTz)
-  if (context !== '') bits.push('·', context)
-  if (item.edited !== null) bits.push(`(수정 ${new Date(item.edited).toLocaleString('ko-KR')})`)
-
-  return `${bits.join(' ')}\n\n${item.body}\n`
+  return `${head}\n\n${item.body}\n`
 }
 
 /** 깨진 값 하나 때문에 내보내기를 멈추지 않는다 */
