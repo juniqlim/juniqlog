@@ -16,8 +16,8 @@
 **thinkthink** 로 정했다. 저장소·패키지 이름과 도메인(`thinkthink.dev`)도 옮겼다.
 아이콘은 `think` 를 둘 겹쳐 쌓았다 — 거듭 생각한다는 뜻이 모양으로 읽힌다.
 
-`src/draft.ts` 의 임시 저장 열쇠 `juniqlog:draft` 만 그대로 둔다.
-바꾸면 쓰다 만 글이 사라진다.
+`src/draft.ts` 의 임시 저장 열쇠도 `thinkthink:draft` 로 옮겼다.
+쓰던 초안 하나를 버리는 값으로, 쓰는 사람이 나뿐이라 치를 만했다.
 
 이름은 짧게, 뜻은 부제로 나눈다. 머리말 셋째 줄이 그대로 영어가 된 셈이다.
 `think and think` 는 "거듭 생각한다"라 다른 말이고, 문법을 벗어난 `thinkthink`

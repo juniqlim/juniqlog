@@ -11,7 +11,7 @@ export interface Store {
   removeItem(key: string): void
 }
 
-const KEY = 'juniqlog:draft'
+const KEY = 'thinkthink:draft'
 
 /** 저장소가 막혀 있어도(사파리 비공개 모드, 용량 초과) 앱은 계속 돌아야 한다 */
 export function saveDraft(body: string, store: Store): void {

@@ -33,6 +33,14 @@ describe('초안', () => {
     expect(loadDraft(store)).toBe('')
   })
 
+  it('열쇠는 thinkthink:draft — 바뀌면 남긴 글을 못 찾는다', () => {
+    const store = memory()
+
+    saveDraft('쓰다 만 글', store)
+
+    expect(store.getItem('thinkthink:draft')).toBe('쓰다 만 글')
+  })
+
   it('저장소가 막혀 있어도 앱을 멈추지 않는다', () => {
     const broken: Store = {
       getItem: () => { throw new Error('접근 불가') },
