@@ -41,23 +41,76 @@ describe('dateOf', () => {
 })
 
 
+const HOME = 'Asia/Seoul'
+
 describe('copyText', () => {
   it('언제 쓴 글인지 앞에 붙인다', () => {
     const entry = { created_at: '2026-07-24T14:32:07', body: '타코 먹고싶다' }
 
-    expect(copyText(entry)).toBe('2026. 7. 24. 14:32:07\n타코 먹고싶다')
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07\n타코 먹고싶다')
   })
 
   it('날짜는 0을 채우지 않고 시각은 채운다', () => {
     const entry = { created_at: '2026-01-05T09:05:07', body: '새해' }
 
-    expect(copyText(entry)).toBe('2026. 1. 5. 09:05:07\n새해')
+    expect(copyText(entry, HOME)).toBe('2026. 1. 5. 09:05:07\n새해')
   })
 
   it('여러 줄 본문은 그대로 둔다', () => {
     const entry = { created_at: '2026-07-24T09:05:07', body: '할 일\n- 하나\n- 둘' }
 
-    expect(copyText(entry)).toBe('2026. 7. 24. 09:05:07\n할 일\n- 하나\n- 둘')
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 09:05:07\n할 일\n- 하나\n- 둘')
+  })
+
+  // 내보내기와 같은 것을 담는다 — 옮겨 붙인 글만 정황이 빠지면 안 된다
+  it('태그를 시각 옆에 붙인다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코 #일기 #점심', tags: ['일기', '점심'] }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07 #일기 #점심\n타코 #일기 #점심')
+  })
+
+  it('어디서 무엇으로 썼는지 붙인다', () => {
+    const entry = {
+      created_at: '2026-07-24T14:32:07',
+      body: '타코',
+      meta: JSON.stringify({ dev: 'iPhone', tz: HOME, loc: { lat: 37.4021, lon: 126.9227 } }),
+    }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07 · iPhone · 37.4021,126.9227\n타코')
+  })
+
+  it('집 시간대는 적지 않는다 — 늘 같은 값은 읽는 데 방해만 된다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코', meta: JSON.stringify({ tz: HOME }) }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07\n타코')
+  })
+
+  it('다른 시간대에서 쓴 글은 그것을 적는다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코', meta: JSON.stringify({ tz: 'Europe/Berlin' }) }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07 · Europe/Berlin\n타코')
+  })
+
+  it('고친 글은 고친 것을 밝힌다', () => {
+    const entry = {
+      created_at: '2026-07-24T14:32:07',
+      updated_at: '2026-07-25T09:00:00',
+      body: '타코',
+    }
+
+    expect(copyText(entry, HOME)).toContain('(수정 ')
+  })
+
+  it('손대지 않은 글에는 수정 표시가 없다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', updated_at: '2026-07-24T14:32:07', body: '타코' }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07\n타코')
+  })
+
+  it('정황이 깨져 있어도 글은 옮겨진다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코', meta: '{[망가진' }
+
+    expect(copyText(entry, HOME)).toBe('2026. 7. 24. 14:32:07\n타코')
   })
 })
 
@@ -70,7 +123,7 @@ describe('copyGroupText', () => {
       { created_at: '2026-07-24T14:32:07', body: '점심' },
     ]
 
-    expect(copyGroupText(entries)).toBe(
+    expect(copyGroupText(entries, HOME)).toBe(
       '2026. 7. 24. 09:05:07\n아침\n\n2026. 7. 24. 14:32:07\n점심',
     )
   })
@@ -78,11 +131,11 @@ describe('copyGroupText', () => {
   it('한 건이면 개별 복사와 똑같다', () => {
     const entries = [{ created_at: '2026-07-24T09:05:07', body: '아침' }]
 
-    expect(copyGroupText(entries)).toBe(copyText(entries[0]))
+    expect(copyGroupText(entries, HOME)).toBe(copyText(entries[0], HOME))
   })
 
   it('빈 목록이면 빈 문자열이다', () => {
-    expect(copyGroupText([])).toBe('')
+    expect(copyGroupText([], HOME)).toBe('')
   })
 })
 

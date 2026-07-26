@@ -379,8 +379,9 @@ async function importFrom(file: File, btn: HTMLButtonElement) {
   }
 }
 
-const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry), btn)
-const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list), btn)
+const homeTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry, homeTz()), btn)
+const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list, homeTz()), btn)
 
 /* ---- sidebar ---- */
 const openSidebar = (on: boolean) => {

@@ -1,3 +1,6 @@
+// 확장자를 적는 이유: tools/export.ts 가 vite 없이 node 로 이 파일을 부른다
+import { describeMeta } from './meta.ts'
+
 export interface LogEntry {
   id: string
   body: string
@@ -34,17 +37,39 @@ function plainDate(iso: string): string {
   return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`
 }
 
-/** 밖으로 옮겨 붙일 때는 언제 쓴 글인지가 함께 가야 한다 */
-export function copyText(entry: { created_at: string; body: string }): string {
-  return `${plainDate(entry.created_at)} ${timeOf(entry.created_at)}\n${entry.body}`
+export interface Copyable {
+  created_at: string
+  body: string
+  updated_at?: string
+  tags?: string[]
+  meta?: string | null
+}
+
+/**
+ * 밖으로 옮겨 붙일 때는 언제 어디서 쓴 글인지가 함께 가야 한다.
+ * 내보내기와 같은 것을 담는다 — 옮겨 붙였다고 정황이 빠질 이유가 없다.
+ */
+export function copyText(entry: Copyable, homeTz: string): string {
+  const bits = [
+    `${plainDate(entry.created_at)} ${timeOf(entry.created_at)}`,
+    ...(entry.tags ?? []).map(t => '#' + t),
+  ]
+
+  const context = describeMeta(entry.meta ?? null, homeTz)
+  if (context !== '') bits.push('·', context)
+  if (entry.updated_at !== undefined && entry.updated_at > entry.created_at) {
+    bits.push(`(수정 ${new Date(entry.updated_at).toLocaleString('ko-KR')})`)
+  }
+
+  return `${bits.join(' ')}\n${entry.body}`
 }
 
 /**
  * 하루치를 한 번에.
  * 날짜를 맨 위에 한 번만 쓰지 않는다 — 잘라 붙였을 때 각 글이 혼자 읽혀야 한다.
  */
-export function copyGroupText(entries: { created_at: string; body: string }[]): string {
-  return entries.map(copyText).join('\n\n')
+export function copyGroupText(entries: Copyable[], homeTz: string): string {
+  return entries.map(e => copyText(e, homeTz)).join('\n\n')
 }
 
 export function visible(entries: LogEntry[]): LogEntry[] {
