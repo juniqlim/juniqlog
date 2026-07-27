@@ -16,6 +16,7 @@ import { plan } from './import'
 import { currentTheme, toggle, label, barColor, KEY, type Theme } from './theme'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
+import { report, type Mark } from './boot'
 
 /** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
 const store: Store = pickStore()
@@ -38,6 +39,27 @@ let openMonths = new Set<string>()
 let unwatch: (() => void) | null = null
 
 const $ = (id: string) => document.getElementById(id)!
+
+/* ---- 부팅에 걸린 시간 (원인을 찾으면 지운다) ---- */
+
+/** 여기까지 온 것만으로 이미 내려받고 해석하는 시간이 지났다 */
+const marks: Mark[] = [{ name: '스크립트', at: performance.now() }]
+
+/** 재로그인이나 탭 복귀로 다시 불려도 첫 부팅의 숫자를 덮지 않는다 */
+let booted = false
+
+const mark = (name: string) => { if (!booted) marks.push({ name, at: performance.now() }) }
+
+function showBoot() {
+  if (booted) return
+  booted = true
+
+  const text = report(marks, performance.getEntriesByType('resource'))
+  const btn = $('boot') as HTMLButtonElement
+  btn.textContent = `${Math.round(marks[marks.length - 1].at)}ms`
+  btn.hidden = false
+  btn.onclick = () => { void copyToClipboard(text, btn) }
+}
 
 /** 글자는 글자로 넣는다 — 붙이는 값이 HTML 로 해석될 여지를 없앤다 */
 function span(className: string, text: string): HTMLSpanElement {
@@ -126,8 +148,10 @@ async function refreshAuth() {
     stopWatching(); showAuth(); return
   }
   if (!who) { stopWatching(); showAuth(); return }
+  mark('세션·키')
 
   showApp(); trackLocation(); await refresh()
+  mark('첫 그리기'); showBoot()
   void flush()   // 지난번에 못 보낸 글부터 치운다
   unwatch ??= store.watch(() => { void refresh() })
 }
