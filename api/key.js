@@ -28,6 +28,30 @@ const json = (body, status = 200) =>
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   })
 
+/**
+ * 토큰에 적힌 신원. 서명은 보지 않는다.
+ *
+ * 믿으려고 읽는 것이 아니라, 열쇠 조회를 미리 걸어둘 자리를 알려고 읽는다.
+ * 내줄지 말지는 아래에서 Supabase 에 물어 확인한 답으로만 정한다.
+ */
+export function claimsOf(token) {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return null
+    return JSON.parse(new TextDecoder().decode(fromBase64(payload)))
+  } catch {
+    return null
+  }
+}
+
+/** 감싼 채로 놓아둔 DEK. 이 테이블은 service_role 로만 만진다 */
+function wrappedOf(userId, auth) {
+  return fetch(
+    `${SUPABASE_URL}/rest/v1/user_keys?select=wrapped_dek&user_id=eq.${userId}`,
+    { headers: auth },
+  ).then(r => r.json())
+}
+
 export default async function handler(req) {
   const kekRaw = process.env.NOTE_KEK
   const serviceKey = process.env.SUPABASE_SERVICE_KEY
@@ -36,21 +60,28 @@ export default async function handler(req) {
   const token = req.headers.get('authorization')?.replace(/^Bearer /, '')
   if (!token) return json({ error: '권한 없음' }, 401)
 
-  const who = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: { authorization: `Bearer ${token}`, apikey: SUPABASE_ANON },
-  })
+  const auth = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }
+  const guess = claimsOf(token)?.sub
+
+  // 신원 확인과 열쇠 조회를 함께 띄운다. 차례로 하면 먼 왕복을 두 번 하는데,
+  // 폰에서 재보니 그 둘이 부팅 시간의 절반이었다.
+  const [who, early] = await Promise.all([
+    fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { authorization: `Bearer ${token}`, apikey: SUPABASE_ANON },
+    }),
+    // 미리 거는 조회다. 여기서 넘어져도 확인 결과부터 알려야 하므로 삼킨다
+    guess ? wrappedOf(guess, auth).catch(() => null) : null,
+  ])
+
   if (!who.ok) return json({ error: '권한 없음' }, 401)
 
   const user = await who.json()
   if (user.email !== ALLOWED_EMAIL) return json({ error: '권한 없음' }, 403)
 
-  const auth = { apikey: serviceKey, authorization: `Bearer ${serviceKey}` }
   const kek = await importKey(kekRaw)
 
-  const rows = await fetch(
-    `${SUPABASE_URL}/rest/v1/user_keys?select=wrapped_dek&user_id=eq.${user.id}`,
-    { headers: auth },
-  ).then(r => r.json())
+  // 미리 받아둔 것은 토큰이 스스로 주장한 자리다. 확인된 신원과 어긋나면 버린다
+  const rows = guess === user.id && early ? early : await wrappedOf(user.id, auth)
 
   // 이미 있으면 풀어서 준다
   if (rows.length > 0) return json({ key: await decrypt(rows[0].wrapped_dek, kek) })

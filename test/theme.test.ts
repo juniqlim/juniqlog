@@ -26,9 +26,9 @@ describe('toggle', () => {
 })
 
 describe('label', () => {
-  it('지금이 아니라 눌렀을 때 될 모습을 적는다', () => {
-    expect(label('dark')).toBe('밝게')
-    expect(label('light')).toBe('어둡게')
+  it('지금이 아니라 눌렀을 때 될 모습을 보인다 — 어두우면 해, 밝으면 달', () => {
+    expect(label('dark')).toBe('☀️')
+    expect(label('light')).toBe('🌙')
   })
 })
 

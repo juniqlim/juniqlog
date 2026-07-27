@@ -21,9 +21,12 @@ export function toggle(now: Theme): Theme {
   return now === 'dark' ? 'light' : 'dark'
 }
 
-/** 지금이 아니라 눌렀을 때 될 모습을 적는다 — 버튼은 무엇이 일어날지를 말해야 한다 */
+/**
+ * 지금이 아니라 눌렀을 때 될 모습을 보인다 — 버튼은 무엇이 일어날지를 말해야 한다.
+ * 글자 대신 그림인 것은 머리말이 좁아서다. 제목이 한가운데 있으려면 양옆이 가벼워야 한다.
+ */
 export function label(now: Theme): string {
-  return now === 'dark' ? '밝게' : '어둡게'
+  return now === 'dark' ? '☀️' : '🌙'
 }
 
 /** 아이폰 상태 표시줄 색. 배경과 어긋나면 위쪽에 띠가 생긴다 */
