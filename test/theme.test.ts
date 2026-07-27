@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { currentTheme, toggle, label, barColor } from '../src/theme'
 
 describe('currentTheme', () => {
@@ -35,5 +36,14 @@ describe('barColor', () => {
   it('아이폰 상태 표시줄이 배경과 이어지게 색을 맞춘다', () => {
     expect(barColor('dark')).toBe('#0f1115')
     expect(barColor('light')).toBe('#f6f7f9')
+  })
+})
+
+describe('밝기 버튼 자리', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+  const header = html.match(/<header>[\s\S]*?<\/header>/)?.[0] ?? ''
+
+  it('머리말에 있다 — 메뉴를 열지 않고 바꾼다', () => {
+    expect(header).toContain('id="skin"')
   })
 })

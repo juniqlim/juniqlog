@@ -363,6 +363,11 @@ function setTheme(next: Theme) {
 /** 고른 적이 있으면 그것부터 입고 시작한다 */
 if (localStorage.getItem(KEY) !== null) setTheme(theme())
 
+const skin = $('skin')
+const markSkin = () => { skin.textContent = label(theme()) }
+skin.onclick = () => { setTheme(toggle(theme())); markSkin() }
+markSkin()
+
 /** 파일을 고르게 하고, 이미 있는 것은 빼고 넣는다 */
 function pickBackup(btn: HTMLButtonElement) {
   const input = document.createElement('input')
@@ -460,12 +465,6 @@ function renderSidebar() {
   load.textContent = '가져오기'
   load.onclick = () => pickBackup(load)
   el.appendChild(load)
-
-  const skin = document.createElement('button')
-  skin.className = 'trash out'
-  skin.textContent = label(theme())
-  skin.onclick = () => { setTheme(toggle(theme())); skin.textContent = label(theme()) }
-  el.appendChild(skin)
 
   // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
   const out = document.createElement('button')
