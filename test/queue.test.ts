@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  enqueue, dequeue, markFailed, next, withPending, load, save,
+  enqueue, dequeue, markFailed, reasonOf, next, withPending, load, save,
   type Pending, type Store,
 } from '../src/queue'
 
@@ -54,16 +54,49 @@ describe('큐 — 넣고 빼기', () => {
   })
 
   it('실패해도 큐에 남는다 — 표시만 바뀐다', () => {
-    const q = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a')
+    const q = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a', '연결 실패')
 
     expect(q).toHaveLength(1)
     expect(q[0].failed).toBe(true)
   })
 
   it('실패한 것도 다시 보낸다 — 맨 앞이면 차례가 온다', () => {
-    const q = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a')
+    const q = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a', '연결 실패')
 
     expect(next(q)?.id).toBe('a')
+  })
+
+  it('왜 실패했는지 함께 들고 있는다 — 폰에는 콘솔이 없다', () => {
+    const q = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a', 'JWT expired')
+
+    expect(q[0].error).toBe('JWT expired')
+  })
+
+  it('다시 실패하면 마지막 사유로 바꾼다', () => {
+    const once = markFailed(enqueue([], p('a', '2026-07-25T10:00:00Z')), 'a', '연결 실패')
+
+    expect(markFailed(once, 'a', 'JWT expired')[0].error).toBe('JWT expired')
+  })
+})
+
+describe('큐 — 사유를 한 줄로', () => {
+  it('Error 는 이름과 메시지를 붙인다 — 이름이 곧 실마리다', () => {
+    expect(reasonOf(new TypeError('Load failed'))).toBe('TypeError: Load failed')
+  })
+
+  it('Supabase 오류는 딸린 단서까지 남긴다', () => {
+    const e = { message: 'JWT expired', code: 'PGRST301', details: null, hint: null }
+
+    expect(reasonOf(e)).toBe('JWT expired code=PGRST301')
+  })
+
+  it('문자열로 던진 것도 그대로 쓴다', () => {
+    expect(reasonOf('그냥 문자열')).toBe('그냥 문자열')
+  })
+
+  it('아무것도 없으면 없다고 말한다 — 빈 칸은 더 헷갈린다', () => {
+    expect(reasonOf(null)).toBe('알 수 없는 오류')
+    expect(reasonOf({})).toBe('알 수 없는 오류')
   })
 })
 
@@ -92,6 +125,14 @@ describe('큐 — 화면에 얹기', () => {
 
     expect(shown[0].pending).toBe(true)
     expect(shown[0].failed).toBe(false)
+  })
+
+  it('실패 사유도 화면까지 들고 나온다 — 여기가 유일하게 보이는 자리다', () => {
+    const q = markFailed([p('a', '2026-07-25T10:00:00.000Z')], 'a', 'JWT expired')
+
+    const shown = withPending([], q, day)
+
+    expect(shown[0].error).toBe('JWT expired')
   })
 
   it('본문에서 태그를 뽑아 보여준다 — 올라간 뒤와 같은 모습이어야 한다', () => {

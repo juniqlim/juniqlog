@@ -21,10 +21,12 @@ export interface Pending {
   at: string
   /** 마지막 시도가 실패했는가 — 화면에 드러내려고 들고 있다 */
   failed: boolean
+  /** 마지막 실패 사유. 폰에는 콘솔이 없어 여기 담아두지 않으면 사라진다 */
+  error?: string
 }
 
 /** 화면에 얹은 대기 글. 아직 서버에 없으니 고치거나 지울 수 없다 */
-export type PendingEntry = LogEntry & { pending: true; failed: boolean }
+export type PendingEntry = LogEntry & { pending: true; failed: boolean; error?: string }
 
 export interface Store {
   getItem(key: string): string | null
@@ -43,8 +45,29 @@ export function dequeue(queue: Pending[], id: string): Pending[] {
 }
 
 /** 실패해도 빼지 않는다 — 빼는 순간 글이 사라진다 */
-export function markFailed(queue: Pending[], id: string): Pending[] {
-  return queue.map(i => (i.id === id ? { ...i, failed: true } : i))
+export function markFailed(queue: Pending[], id: string, error: string): Pending[] {
+  return queue.map(i => (i.id === id ? { ...i, failed: true, error } : i))
+}
+
+/**
+ * 던져진 것이 무엇이든 사람이 읽고 붙여넣을 한 줄로 만든다.
+ *
+ * 폰에서는 콘솔을 열 수 없다. 여기서 놓친 단서는 다시 볼 길이 없으므로
+ * 아는 자리는 모두 훑는다 — Error 든 Supabase 응답이든.
+ */
+export function reasonOf(e: unknown): string {
+  if (e === null || e === undefined) return '알 수 없는 오류'
+  if (typeof e === 'string') return e || '알 수 없는 오류'
+  if (typeof e !== 'object') return String(e)
+
+  const o = e as Record<string, unknown>
+  const said = (v: unknown) => typeof v === 'string' && v !== ''
+  const head = [o.name, o.message].filter(said).join(': ')
+  const rest = ['code', 'status', 'details', 'hint']
+    .filter(k => o[k] !== undefined && o[k] !== null && o[k] !== '')
+    .map(k => `${k}=${String(o[k])}`)
+
+  return [head, ...rest].filter(Boolean).join(' ') || '알 수 없는 오류'
 }
 
 export function next(queue: Pending[]): Pending | null {
@@ -62,6 +85,7 @@ function asEntry(item: Pending): PendingEntry {
     meta: item.meta,
     pending: true,
     failed: item.failed,
+    error: item.error,
   }
 }
 

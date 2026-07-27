@@ -9,7 +9,7 @@ import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
-import { enqueue, dequeue, markFailed, next, withPending, isPending, load, save, type Pending } from './queue'
+import { enqueue, dequeue, markFailed, reasonOf, next, withPending, isPending, load, save, type Pending } from './queue'
 import { isFresh, fixFrom, buildMeta, deviceOf, type Fix } from './meta'
 import { buildBackup, deliver, readBackup } from './backup'
 import { plan } from './import'
@@ -230,7 +230,7 @@ async function flush() {
         await store.add(item.body, item.meta, item.at)
       } catch (e) {
         console.error(e)
-        queue = markFailed(queue, item.id)
+        queue = markFailed(queue, item.id, reasonOf(e))
         save(queue, localStorage)
         renderAll()
         return
@@ -663,7 +663,10 @@ function renderTimeline() {
           <span class="meta"><span class="time">${timeOf(e.created_at)}</span></span>
           <span class="actions">${waiting
             ? `<span class="waiting">${e.failed ? '못 보냄' : '보내는 중'}</span>
-               ${e.failed ? '<button class="act retry" title="다시 보내기">↻</button>' : ''}`
+               ${e.failed
+                 ? `<button class="act retry" title="다시 보내기">↻</button>
+                    <button class="act why" title="실패 사유 복사">⧉</button>`
+                 : ''}`
             : inTrash
             ? `<button class="act back" title="복원">↩</button>
                <button class="act purge" title="완전 삭제">×</button>`
@@ -676,6 +679,9 @@ function renderTimeline() {
         <div class="body"></div>`
       if (waiting) {
         el.querySelector<HTMLElement>('.retry')?.addEventListener('click', () => { void flush() })
+        el.querySelector<HTMLElement>('.why')?.addEventListener('click', ev => {
+          void copyToClipboard(e.error ?? '알 수 없는 오류', ev.currentTarget as HTMLElement)
+        })
       } else if (inTrash) {
         el.querySelector<HTMLElement>('.back')!.onclick = () => restoreEntry(e)
         el.querySelector<HTMLElement>('.purge')!.onclick = () => purgeEntry(e)
@@ -702,6 +708,8 @@ function renderTimeline() {
 
       const box = el.querySelector<HTMLElement>('.body')!
       renderBody(box, e.body)
+      // 왜 못 갔는지는 여기서만 볼 수 있다 — 폰에는 열어볼 콘솔이 없다
+      if (waiting && e.failed) el.appendChild(span('reason', e.error ?? '알 수 없는 오류'))
       if (!waiting && !inTrash) el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
       tl.appendChild(el)
     }
