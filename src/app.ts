@@ -17,6 +17,7 @@ import { currentTheme, toggle, label, barColor, KEY, type Theme } from './theme'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 import { report, type Mark } from './boot'
+import { share } from './share'
 
 /** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
 const store: Store = pickStore()
@@ -150,7 +151,7 @@ async function refreshAuth() {
   if (!who) { stopWatching(); showAuth(); return }
   mark('세션·키')
 
-  showApp(); trackLocation(); await refresh()
+  showApp(); trackLocation(); await refreshOnBoot('boot')
   mark('첫 그리기'); showBoot()
   void flush()   // 지난번에 못 보낸 글부터 치운다
   unwatch ??= store.watch(() => { void refresh() })
@@ -202,6 +203,14 @@ async function refresh() {
   renderAll()
   scrollToLatest()
 }
+
+/**
+ * 부팅에서만 쓰는 갈래. 로그인 사실이 한 번에 세 번 오는데 그때 읽을 것은 하나다.
+ *
+ * 다른 자리의 refresh 는 묶지 않는다 — 거기서는 "달라졌으니 다시 읽어라"가 요점이라,
+ * 겹친다고 합쳐 버리면 방금 바뀐 것을 놓친다.
+ */
+const refreshOnBoot = share(() => refresh())
 
 function scrollToLatest() {
   window.scrollTo({ top: document.body.scrollHeight })
