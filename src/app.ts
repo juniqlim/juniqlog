@@ -9,6 +9,7 @@ import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
 import { isSubmit, isCancel } from './input'
 import { saveDraft, loadDraft } from './draft'
+import { needsHint, hintShown } from './hint'
 import { enqueue, dequeue, markFailed, reasonOf, next, withPending, isPending, load, save, type Pending } from './queue'
 import { isFresh, fixFrom, buildMeta, deviceOf, type Fix } from './meta'
 import { buildBackup, deliver, readBackup } from './backup'
@@ -477,6 +478,12 @@ function renderSidebar() {
   load.onclick = () => pickBackup(load)
   el.appendChild(load)
 
+  const guide = document.createElement('button')
+  guide.className = 'trash out'
+  guide.textContent = '설명서'
+  guide.onclick = () => { $('guide').hidden = false; openSidebar(false) }
+  el.appendChild(guide)
+
   // 자주 누를 일이 없다. 머리말 자리를 차지하느니 여기 둔다
   const out = document.createElement('button')
   out.className = 'trash out'
@@ -764,6 +771,18 @@ ta.addEventListener('input', () => {
   fitInput()
   saveDraft(ta.value, localStorage)
 })
+
+// Enter 로 남긴다는 것은 한 번만 알려준다. 닫으면 설명서에서 다시 볼 수 있다
+if (needsHint(localStorage)) $('hint').hidden = false
+$('hintclose').onclick = () => {
+  $('hint').hidden = true
+  hintShown(localStorage)
+}
+
+const closeGuide = () => { $('guide').hidden = true }
+$('guideclose').onclick = closeGuide
+// 바깥을 눌러도 닫힌다 — 읽고 나면 빠져나갈 길이 넓어야 한다
+$('guide').onclick = e => { if (e.target === $('guide')) closeGuide() }
 
 // 쓰다 만 글은 앱을 껐다 켜도, 며칠 뒤에도 그대로 있다
 ta.value = loadDraft(localStorage)
