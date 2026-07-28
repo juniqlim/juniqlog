@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSubmit, isCancel } from '../src/input'
+import { isSubmit, isCancel, onLeave } from '../src/input'
 
 const key = (key: string, opts: { shiftKey?: boolean; isComposing?: boolean } = {}) =>
   ({ key, shiftKey: opts.shiftKey ?? false, isComposing: opts.isComposing ?? false })
@@ -38,5 +38,24 @@ describe('isCancel', () => {
 
   it('다른 키는 취소하지 않는다', () => {
     expect(isCancel(key('Enter'))).toBe(false)
+  })
+})
+
+
+describe('고치다 말고 나올 때', () => {
+  it('고친 것이 있으면 남긴다 — 나가느라 잃으면 안 된다', () => {
+    expect(onLeave('고친 글', '원래 글')).toBe('save')
+  })
+
+  it('그대로면 그냥 닫는다 — 손대지 않은 글을 다시 쓸 이유가 없다', () => {
+    expect(onLeave('원래 글', '원래 글')).toBe('close')
+  })
+
+  it('다 지웠으면 닫는다 — 빈 글은 남기지 않는다', () => {
+    expect(onLeave('', '원래 글')).toBe('close')
+  })
+
+  it('공백만 남았어도 빈 글로 본다', () => {
+    expect(onLeave('   \n  ', '원래 글')).toBe('close')
   })
 })

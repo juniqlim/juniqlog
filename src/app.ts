@@ -7,7 +7,7 @@ import { treeOf, today, type YearNode } from './calendar'
 import { headingText } from './heading'
 import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
-import { isSubmit, isCancel } from './input'
+import { isSubmit, isCancel, onLeave } from './input'
 import { saveDraft, loadDraft } from './draft'
 import { needsHint, hintShown } from './hint'
 import { enqueue, dequeue, markFailed, reasonOf, next, withPending, isPending, load, save, type Pending } from './queue'
@@ -600,7 +600,10 @@ function pieceNode(piece: Piece): Node {
 }
 
 /** 본문 자리에서 바로 고친다 — Enter 저장, Esc 취소 */
-function startEdit(box: HTMLElement, entry: LogEntry) {
+function startEdit(box: HTMLElement, entry: LogEntry, btn: HTMLElement) {
+  // 고치는 동안 같은 자리가 저장 단추가 된다 — 폰에서는 누를 곳이 보여야 한다
+  btn.textContent = '✓'; btn.title = '저장'
+
   box.textContent = ''
   const ta = document.createElement('textarea')
   ta.className = 'editing'
@@ -611,11 +614,26 @@ function startEdit(box: HTMLElement, entry: LogEntry) {
   ta.addEventListener('input', fit)
   fit(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length)
 
-  const cancel = () => { box.textContent = ''; renderBody(box, entry.body) }
   ta.onkeydown = e => {
-    if (isCancel(e)) { e.preventDefault(); cancel() }
+    if (isCancel(e)) { e.preventDefault(); endEdit(box, entry, btn) }
     if (isSubmit(e)) { e.preventDefault(); saveEdit(entry, ta.value) }
   }
+  // 다른 데를 누르면 수정 상태에서 나온다. 고친 것은 들고 나온다
+  ta.onblur = () => leaveEdit(box, entry, ta, btn)
+}
+
+/** 고친 것 없이 닫는다. 남길 것이 있으면 leaveEdit 이 부른다 */
+function endEdit(box: HTMLElement, entry: LogEntry, btn: HTMLElement) {
+  btn.textContent = '✎'; btn.title = '수정'
+  box.textContent = ''
+  renderBody(box, entry.body)
+}
+
+/** 고친 것이 있으면 남기고 나온다. 없으면 닫기만 한다 */
+function leaveEdit(box: HTMLElement, entry: LogEntry, ta: HTMLTextAreaElement, btn: HTMLElement) {
+  // 남기면 화면을 통째로 다시 그린다 — 단추도 그때 제 모습으로 돌아온다
+  if (onLeave(ta.value, entry.body) === 'close') endEdit(box, entry, btn)
+  else void saveEdit(entry, ta.value)
 }
 
 function renderBody(box: HTMLElement, body: string) {
@@ -751,7 +769,16 @@ function renderTimeline() {
       renderBody(box, e.body)
       // 왜 못 갔는지는 여기서만 볼 수 있다 — 폰에는 열어볼 콘솔이 없다
       if (waiting && e.failed) el.appendChild(span('reason', e.error ?? '알 수 없는 오류'))
-      if (!waiting && !inTrash) el.querySelector<HTMLElement>('.edit')!.onclick = () => startEdit(box, e)
+      if (!waiting && !inTrash) {
+        const btn = el.querySelector<HTMLElement>('.edit')!
+        // 누르는 순간 수정창이 포커스를 잃으면, 열려 있었는지 알 수 없다
+        btn.addEventListener('mousedown', ev => ev.preventDefault())
+        btn.onclick = () => {
+          const open = box.querySelector('textarea')
+          if (open) leaveEdit(box, e, open, btn)   // 이제 저장 단추다 — 남기고 나온다
+          else startEdit(box, e, btn)
+        }
+      }
       tl.appendChild(el)
     }
   }
@@ -786,7 +813,8 @@ $('guide').onclick = e => { if (e.target === $('guide')) closeGuide() }
 
 // 쓰다 만 글은 앱을 껐다 켜도, 며칠 뒤에도 그대로 있다
 ta.value = loadDraft(localStorage)
-if (ta.value !== '') fitInput()
+// 비어 있어도 재어 준다 — 재지 않으면 textarea 기본값인 두 줄로 뜬다
+fitInput()
 document.addEventListener('visibilitychange', () => {
   if (document.hidden || $('app').hidden) return
   refresh()
