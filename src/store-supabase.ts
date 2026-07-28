@@ -8,6 +8,7 @@ import { monthRange, dayRange, daysAgo } from './calendar'
 import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 import { metaText } from './import'
 import type { Exported } from './export'
+import { share } from './share'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -46,12 +47,13 @@ export function supabaseStore(): Store {
     }
   }
 
-  async function fetchKey(token: string): Promise<CryptoKey> {
+  /** 부팅 한 번에 로그인 사실이 세 번 온다. 열쇠는 그중 한 번만 받아오면 된다 */
+  const fetchKey = share(async (token: string): Promise<CryptoKey> => {
     const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
     if (!res.ok) throw new Error(`키를 받지 못했다 (${res.status})`)
     const { key: raw } = await res.json() as { key: string }
     return importKey(raw)
-  }
+  })
 
   const redirect = () => location.origin + location.pathname
 
