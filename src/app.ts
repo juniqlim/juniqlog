@@ -193,9 +193,11 @@ async function loadIndex() {
 }
 
 async function refresh() {
+  // 볼 자리는 이미 정해져 있다 — 사이드바 재료를 기다리지 않고 함께 읽는다
+  const at = view ?? todayView()
   try {
-    await loadIndex()
-    entries = await store.list(view ?? todayView())
+    const [, rows] = await Promise.all([loadIndex(), store.list(at)])
+    entries = rows
   } catch (e) {
     console.error(e)
     return

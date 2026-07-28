@@ -86,19 +86,19 @@ export function supabaseStore(): Store {
     async signOut() { await sb.auth.signOut() },
 
     async index(): Promise<Index> {
-      const { data, error } = await sb.from('entries')
-        .select('created_at, tags').is('deleted_at', null)
-      if (error) throw new Error(error.message)
+      // 서로 기다릴 이유가 없는 두 물음이다 — 나란히 보내면 둘 중 느린 만큼만 걸린다
+      const [live, trash] = await Promise.all([
+        sb.from('entries').select('created_at, tags').is('deleted_at', null),
+        sb.from('entries').select('id', { count: 'exact', head: true })
+          .gte('deleted_at', daysAgo(TRASH_DAYS, new Date())),
+      ])
+      if (live.error) throw new Error(live.error.message)
 
-      const { count } = await sb.from('entries')
-        .select('id', { count: 'exact', head: true })
-        .gte('deleted_at', daysAgo(TRASH_DAYS, new Date()))
-
-      const rows = data ?? []
+      const rows = live.data ?? []
       return {
         dates: rows.map(r => r.created_at as string),
         tags: rows.map(r => (r.tags ?? []) as string[]),
-        trashCount: count ?? 0,
+        trashCount: trash.count ?? 0,
       }
     },
 
