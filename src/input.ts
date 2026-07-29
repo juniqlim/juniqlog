@@ -31,3 +31,16 @@ export function onLeave(current: string, original: string): 'save' | 'close' {
   if (current.trim() === '' || current === original) return 'close'
   return 'save'
 }
+
+/**
+ * 고치는 칸을 글 길이에 맞춰 재준다.
+ *
+ * scrollHeight 는 안쪽 여백까지만 재고 테두리는 빼놓는다. 잰 값을 그대로
+ * 높이로 주면 테두리 두께만큼 모자라 마지막 줄이 잘리고 스크롤이 생긴다.
+ * offsetHeight 와 clientHeight 의 차이가 곧 테두리 두께다.
+ */
+export function grownHeight(
+  box: { scrollHeight: number; offsetHeight: number; clientHeight: number },
+): number {
+  return box.scrollHeight + box.offsetHeight - box.clientHeight
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSubmit, isCancel, onLeave } from '../src/input'
+import { isSubmit, isCancel, onLeave, grownHeight } from '../src/input'
 
 const key = (key: string, opts: { shiftKey?: boolean; isComposing?: boolean } = {}) =>
   ({ key, shiftKey: opts.shiftKey ?? false, isComposing: opts.isComposing ?? false })
@@ -57,5 +57,18 @@ describe('고치다 말고 나올 때', () => {
 
   it('공백만 남았어도 빈 글로 본다', () => {
     expect(onLeave('   \n  ', '원래 글')).toBe('close')
+  })
+})
+
+
+describe('고치는 칸을 글에 맞춰 재기', () => {
+  // scrollHeight 는 안쪽 여백까지만 재고 테두리는 빼놓는다. 잰 값을 그대로
+  // 높이로 주면 테두리 두께만큼 모자라 마지막 줄이 잘리고 스크롤이 생긴다.
+  it('테두리 두께를 얹는다', () => {
+    expect(grownHeight({ scrollHeight: 300, offsetHeight: 162, clientHeight: 160 })).toBe(302)
+  })
+
+  it('테두리가 없으면 잰 그대로다', () => {
+    expect(grownHeight({ scrollHeight: 300, offsetHeight: 160, clientHeight: 160 })).toBe(300)
   })
 })

@@ -7,7 +7,7 @@ import { treeOf, today, type YearNode } from './calendar'
 import { headingText } from './heading'
 import { parseLines, isTag, bareTag, type Piece } from './tags'
 import { isSearchable } from './search'
-import { isSubmit, isCancel, onLeave } from './input'
+import { isSubmit, isCancel, onLeave, grownHeight } from './input'
 import { saveDraft, loadDraft } from './draft'
 import { needsHint, hintShown } from './hint'
 import { enqueue, dequeue, markFailed, reasonOf, next, withPending, isPending, load, save, type Pending } from './queue'
@@ -610,7 +610,7 @@ function startEdit(box: HTMLElement, entry: LogEntry, btn: HTMLElement) {
   ta.value = entry.body
   box.appendChild(ta)
 
-  const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px' }
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = grownHeight(ta) + 'px' }
   ta.addEventListener('input', fit)
   fit(); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length)
 
