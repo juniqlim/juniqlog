@@ -16,5 +16,17 @@ notes
 # 거들어주는 도구들이 남기는 것 — 프로젝트 것이 아니다
 .refact
 
+# 앱 서명 열쇠. 잃으면 업데이트를 못 얹지만, 새어 나가면 남이 내 이름으로 앱을 낸다
+android/*.keystore
+android/app
+android/build
+android/.gradle
+android/gradle
+android/gradlew*
+android/*.apk
+android/*.idsig
+android/*.aab
+android/store_icon.png
+
 # 남의 앱 속을 들여다본 기록. 내 노트 내용이 예시로 섞여 있다
 docs/upnote-sqlite.md

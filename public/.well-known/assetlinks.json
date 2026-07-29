@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.juniqlim.thinkthink",
+      "sha256_cert_fingerprints": [
+        "F5:2B:38:80:48:B8:FC:42:46:93:82:DE:B1:CC:44:D0:D1:88:90:AB:AC:46:28:31:5D:E9:2F:25:97:33:83:F9"
+      ]
+    }
+  }
+]
