@@ -98,8 +98,11 @@ function locate(timeout: number): Promise<Fix | null> {
 }
 
 /**
- * 화면을 열 때 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다.
+ * 뒤에서 미리 받아둔다 — 대개 이걸로 충분해서 쓸 때 기다릴 일이 없다.
  * 아직 신선하면 그냥 쓴다. 열 때마다 받으면 배터리도 권한 표시도 값이 비싸다.
+ *
+ * 앱이 다 뜬 뒤에 부른다. iOS 는 위치를 물어보는 동안 페이지를 세워버려서,
+ * 뜨는 길목에서 부르면 답할 때까지 앱이 뜨다 만 채로 멈춘다.
  */
 const trackLocation = () => {
   if (isFresh(lastFix, Date.now(), FIX_MAX_AGE)) return
@@ -152,10 +155,11 @@ async function refreshAuth() {
   if (!who) { stopWatching(); showAuth(); return }
   mark('세션·키')
 
-  showApp(); trackLocation(); await refreshOnBoot('boot')
+  showApp(); await refreshOnBoot('boot')
   mark('첫 그리기'); showBoot()
   void flush()   // 지난번에 못 보낸 글부터 치운다
   unwatch ??= store.watch(() => { void refresh() })
+  trackLocation()   // 맨 끝에 — 위치를 묻는 동안 다른 일이 밀리지 않게
 }
 store.onAuth(() => { void refreshAuth() })
 
