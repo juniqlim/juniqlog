@@ -9,6 +9,7 @@ import { importKey, encrypt, decrypt, isEncrypted } from './crypto'
 import { metaText } from './import'
 import type { Exported } from './export'
 import { share } from './share'
+import { loadKey, saveKey, clearKey } from './keycache'
 
 const SUPABASE_URL = 'https://zuvifgiiahbypxsvnzvg.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1dmlmZ2lpYWhieXB4c3ZuenZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NTMwNDQsImV4cCI6MjEwMDQyOTA0NH0.sVexgnQmy0YRcg3bjq0ThHB8sgPLtn1X3SDDyUbeG18'
@@ -22,6 +23,8 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 export function supabaseStore(): Store {
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
   let key: CryptoKey | null = null
+  /** 지금 든 키가 캐시에서 왔는가 — 서버가 키를 갈았으면 낡았을 수 있다 */
+  let cached = false
   let channel: ReturnType<typeof sb.channel> | null = null
 
   const seal = (plain: string) => encrypt(plain, key!)
@@ -43,16 +46,38 @@ export function supabaseStore(): Store {
     try {
       return await decrypt(value, key!)
     } catch {
-      return null
+      const fresh = await refetch('dek')
+      if (fresh === null) return null
+      try {
+        return await decrypt(value, fresh)
+      } catch {
+        return null
+      }
     }
   }
+
+  /**
+   * 안 열리면 캐시 탓부터 의심한다 — 서버가 키를 갈았으면 담아둔 키는 낡는다.
+   * 버리고 새로 받아 한 번 더 연다. 방금 서버에서 받은 키면 다시 받아도 같으니 접는다.
+   */
+  const refetch = share(async (): Promise<CryptoKey | null> => {
+    if (!cached) return null
+    await clearKey()
+    const { data: { session } } = await sb.auth.getSession()
+    if (!session) return null
+    key = await fetchKey((session as Session).access_token)
+    cached = false
+    return key
+  })
 
   /** 부팅 한 번에 로그인 사실이 세 번 온다. 열쇠는 그중 한 번만 받아오면 된다 */
   const fetchKey = share(async (token: string): Promise<CryptoKey> => {
     const res = await fetch('/api/key', { headers: { authorization: `Bearer ${token}` } })
     if (!res.ok) throw new Error(`키를 받지 못했다 (${res.status})`)
     const { key: raw } = await res.json() as { key: string }
-    return importKey(raw)
+    const imported = await importKey(raw)
+    void saveKey(imported, Date.now())   // 다음 부팅은 이 왕복(폰에서 2.5초)을 건너뛴다
+    return imported
   })
 
   const redirect = () => location.origin + location.pathname
@@ -60,10 +85,13 @@ export function supabaseStore(): Store {
   return {
     async session() {
       const { data: { session } } = await sb.auth.getSession()
-      if (!session) { key = null; return null }
+      if (!session) { key = null; void clearKey(); return null }
 
       const token = (session as Session).access_token
-      key = await fetchKey(token)          // 키가 없으면 본문을 읽을 수도 쓸 수도 없다
+      const kept = await loadKey(Date.now())
+      cached = kept !== null
+      // 키가 없으면 본문을 읽을 수도 쓸 수도 없다
+      key = kept ?? await fetchKey(token)
       sb.realtime.setAuth(token)
       return { email: (session as Session).user.email ?? '' }
     },
@@ -83,7 +111,7 @@ export function supabaseStore(): Store {
       })
       return error?.message ?? null
     },
-    async signOut() { await sb.auth.signOut() },
+    async signOut() { await clearKey(); await sb.auth.signOut() },   // 나간 뒤에 열쇠가 남으면 안 된다
 
     async index(): Promise<Index> {
       // 서로 기다릴 이유가 없는 두 물음이다 — 나란히 보내면 둘 중 느린 만큼만 걸린다
