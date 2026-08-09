@@ -12,6 +12,7 @@ notes
 .playwright-mcp
 *.png
 !public/*.png
+!ios/thinkthink/*.png
 
 # 거들어주는 도구들이 남기는 것 — 프로젝트 것이 아니다
 .refact
