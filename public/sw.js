@@ -25,13 +25,23 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return   // Supabase 등 남의 집은 손대지 않는다
   if (url.pathname.startsWith('/api/')) return      // 키는 절대 캐시하지 않는다
 
-  // HTML 은 네트워크 우선 — 배포한 게 바로 반영돼야 한다
+  /**
+   * HTML 은 담아둔 것을 먼저 내주고, 새 것은 뒤에서 받아 담는다.
+   *
+   * 네트워크를 먼저 가면 담아둔 게 있어도 왕복(폰에서 0.8초)만큼 흰 화면이다.
+   * 대신 배포한 것이 한 번 늦게 보인다 — 다음에 열 때 반영된다.
+   * 담아둔 HTML 이 가리키는 자산은 이름에 해시가 붙어 있어 짝이 어긋나지 않는다.
+   */
   if (req.mode === 'navigate') {
-    event.respondWith(
-      fetch(req)
-        .then(res => keep(req, res))
-        .catch(async () => (await caches.match(req)) ?? (await caches.match('/')) ?? offline()),
-    )
+    event.respondWith((async () => {
+      const fresh = fetch(req).then(res => keep(req, res)).catch(() => null)
+      const hit = (await caches.match(req)) ?? (await caches.match('/'))
+      if (hit) {
+        event.waitUntil(fresh)   // 응답은 이미 갔다. 받아 담는 일만 남는다
+        return hit
+      }
+      return (await fresh) ?? offline()
+    })())
     return
   }
 
