@@ -18,6 +18,7 @@ import { currentTheme, toggle, label, barColor, KEY, type Theme } from './theme'
 import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 import { report, type Mark } from './boot'
+import { wasSignedIn } from './signedin'
 import { share } from './share'
 
 /** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
@@ -142,6 +143,9 @@ function stopWatching() {
   unwatch = null
 }
 
+/** 세션과 키가 갖춰졌는가 — 갖춰지기 전에 보내면 잠글 열쇠가 없어 실패로 남는다 */
+let ready = false
+
 async function refreshAuth() {
   let who: { email: string } | null
   try {
@@ -150,9 +154,10 @@ async function refreshAuth() {
     // 키가 없으면 본문을 읽을 수도 쓸 수도 없다. 반쯤 열린 앱을 보여주지 않는다
     console.error(e)
     $('authmsg').textContent = '암호화 키를 받지 못했습니다. 새로고침해 보세요.'
-    stopWatching(); showAuth(); return
+    ready = false; stopWatching(); showAuth(); return
   }
-  if (!who) { stopWatching(); showAuth(); return }
+  if (!who) { ready = false; stopWatching(); showAuth(); return }
+  ready = true
   mark('세션·키')
 
   showApp(); await refreshOnBoot('boot')
@@ -161,6 +166,12 @@ async function refreshAuth() {
   unwatch ??= store.watch(() => { void refresh() })
   trackLocation()   // 맨 끝에 — 위치를 묻는 동안 다른 일이 밀리지 않게
 }
+/**
+ * 확인을 기다리지 않고 먼저 띄운다 — 쓰려고 연 사람을 세워두지 않는다.
+ * 목록은 세션이 오는 대로 채워지고, 그 전에 쓴 글은 큐에서 기다린다.
+ */
+if (wasSignedIn(localStorage)) showApp()
+
 store.onAuth(() => { void refreshAuth() })
 
 $('google').onclick = async () => {
@@ -263,6 +274,7 @@ let flushing = false
  */
 async function flush() {
   if (flushing) return
+  if (!ready) return   // 세션이 오면 refreshAuth 가 부른다. 지금 보내면 실패로만 남는다
   flushing = true
   try {
     for (let item = next(queue); item !== null; item = next(queue)) {
