@@ -19,6 +19,7 @@ import { TRASH_DAYS, type Store, type View } from './store'
 import { pickStore } from './store-pick'
 import { report, type Mark } from './boot'
 import { wasSignedIn } from './signedin'
+import { insideNative, fixFromNative } from './native'
 import { share } from './share'
 
 /** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
@@ -82,8 +83,21 @@ const FIX_WAIT = 4_000
 
 let lastFix: Fix | null = null
 
+/**
+ * 껍데기가 좌표를 밀어 넣는 자리.
+ *
+ * 앱이 권한을 한 번 받아 계속 물고 있으므로, 여기로 들어온 좌표는
+ * 이미 손에 있는 것이다 — 글을 쓸 때 물어보러 갈 일이 없다.
+ */
+;(window as unknown as { thinkthinkFix?: (raw: unknown) => void }).thinkthinkFix = raw => {
+  const fix = fixFromNative(raw)
+  if (fix !== null) lastFix = fix
+}
+
 /** 정확도를 낮게 잡아 빠른 셀·와이파이 측위를 쓴다. GPS 를 켜면 실내에서 한참 걸린다 */
 function locate(timeout: number): Promise<Fix | null> {
+  // 껍데기 안에서는 앱이 대준다. 여기서 물으면 웹뷰 몫의 권한을 따로 묻게 된다
+  if (insideNative(window)) return Promise.resolve(lastFix)
   if (!('geolocation' in navigator)) return Promise.resolve(null)
 
   return new Promise(resolve => {

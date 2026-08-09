@@ -28,5 +28,10 @@ android/*.idsig
 android/*.aab
 android/store_icon.png
 
+# Xcode 가 지어낸 것들 — 빌드 산물과 사람마다 다른 창 상태
+ios/build
+ios/DerivedData
+ios/**/xcuserdata
+
 # 남의 앱 속을 들여다본 기록. 내 노트 내용이 예시로 섞여 있다
 docs/upnote-sqlite.md
