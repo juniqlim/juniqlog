@@ -56,6 +56,7 @@ final class WebViewController: UIViewController {
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.backgroundColor = .themed
         webView.scrollView.backgroundColor = .themed
@@ -103,6 +104,48 @@ final class WebViewController: UIViewController {
 
     @objc private func resume() { locations.startUpdatingLocation() }
     @objc private func pause() { locations.stopUpdatingLocation() }
+}
+
+/**
+ 웹이 띄우는 물음창을 대신 띄운다.
+
+ WKWebView 는 이것을 맡기지 않으면 alert·confirm·prompt 를 아예 보여주지
+ 않는다. 조용히 아니라고 답해버려서, 지우기를 눌러도 아무 일도 일어나지
+ 않고 잘못된 일은 알려지지 않는다.
+ */
+extension WebViewController: WKUIDelegate {
+    func webView(
+        _ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo, completionHandler done: @escaping () -> Void
+    ) {
+        let sheet = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        sheet.addAction(UIAlertAction(title: "확인", style: .default) { _ in done() })
+        present(sheet, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo, completionHandler done: @escaping (Bool) -> Void
+    ) {
+        let sheet = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        sheet.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in done(false) })
+        sheet.addAction(UIAlertAction(title: "확인", style: .default) { _ in done(true) })
+        present(sheet, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+        completionHandler done: @escaping (String?) -> Void
+    ) {
+        let sheet = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
+        sheet.addTextField { $0.text = defaultText }
+        sheet.addAction(UIAlertAction(title: "취소", style: .cancel) { _ in done(nil) })
+        sheet.addAction(UIAlertAction(title: "확인", style: .default) { [weak sheet] _ in
+            done(sheet?.textFields?.first?.text ?? "")
+        })
+        present(sheet, animated: true)
+    }
 }
 
 extension WebViewController: WKNavigationDelegate {
