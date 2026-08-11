@@ -1,4 +1,4 @@
-import { addTag as withTag } from './entry'
+import { addTag as withTag, tooLong, BODY_MAX } from './entry'
 import {
   timeOf, copyText, copyGroupText, groupByDate, tagsOf,
   type LogEntry, type TagCount,
@@ -255,10 +255,23 @@ let queue: Pending[] = load(localStorage)
  *
  * 누른 시각을 여기서 잡는다. 서버에 닿기까지 걸린 시간이 글에 얹히면 안 된다.
  */
+/**
+ * 너무 길면 알리고 받지 않는다.
+ *
+ * 조용히 삼키면 쓴 사람은 글이 사라진 줄 안다. 얼마나 넘었는지까지 알려야
+ * 어디를 줄일지 가늠한다.
+ */
+function accepts(body: string): boolean {
+  if (!tooLong(body)) return true
+  alert(`글이 너무 깁니다. ${BODY_MAX}자까지 쓸 수 있습니다 (지금 ${body.length}자).`)
+  return false
+}
+
 function submit() {
   const ta = $('input') as HTMLTextAreaElement
   const body = ta.value
   if (body.trim() === '') return
+  if (!accepts(body)) return
 
   queue = enqueue(queue, {
     id: crypto.randomUUID(),
@@ -321,6 +334,7 @@ async function addTag(entry: LogEntry, tag: string) {
 
 async function saveEdit(entry: LogEntry, body: string) {
   if (body.trim() === '' || body === entry.body) return
+  if (!accepts(body)) return
   try {
     await store.edit(entry.id, body)
   } catch (e) {

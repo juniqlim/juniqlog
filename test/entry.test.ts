@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { createEntry, addTag } from '../src/entry'
+import { createEntry, addTag, tooLong, BODY_MAX } from '../src/entry'
+
+
+describe('tooLong', () => {
+  it('길이만큼은 받는다', () => {
+    expect(tooLong('가'.repeat(BODY_MAX))).toBe(false)
+  })
+
+  it('한 글자라도 넘으면 받지 않는다', () => {
+    expect(tooLong('가'.repeat(BODY_MAX + 1))).toBe(true)
+  })
+
+  it('보통 길이의 글은 걸리지 않는다', () => {
+    expect(tooLong('TSMC 매수함')).toBe(false)
+  })
+})
 
 
 describe('createEntry', () => {

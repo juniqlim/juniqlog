@@ -49,6 +49,19 @@ create trigger entries_touch before update on public.entries
 alter table public.entries
   add column if not exists meta text;
 
+-- 글 한 편의 길이 상한. 앱이 만 자에서 막지만 브라우저를 건너뛰고 들어오는
+-- 길이 있으니 여기서 한 번 더 막는다 (src/entry.ts 의 BODY_MAX).
+-- 여기 담기는 것은 암호문이라 원문보다 길다 — 한글 한 자가 UTF-8 로 3바이트,
+-- base64 로 다시 4/3 배가 되어 만 자가 사만 자쯤 된다. 그 위로 여유를 둔다.
+alter table public.entries drop constraint if exists entries_body_len;
+alter table public.entries add constraint entries_body_len
+  check (length(body) <= 60000);
+
+-- 정황도 같은 이유로 재둔다. 앱이 넣는 것은 이백 자를 넘지 않는다.
+alter table public.entries drop constraint if exists entries_meta_len;
+alter table public.entries add constraint entries_meta_len
+  check (meta is null or length(meta) <= 4000);
+
 create index if not exists entries_user_created
   on public.entries (user_id, created_at desc);
 
