@@ -1,6 +1,6 @@
 import { addTag as withTag, tooLong, BODY_MAX } from './entry'
 import {
-  timeOf, copyText, copyGroupText, groupByDate, tagsOf,
+  timeOf, copyEntryText, copyGroupText, tweetLength, TWEET_LIMIT, groupByDate, tagsOf,
   type LogEntry, type TagCount,
 } from './timeline'
 import { treeOf, today, type YearNode } from './calendar'
@@ -369,8 +369,8 @@ async function removeEntry(entry: LogEntry) {
   await refresh()
 }
 
-/** 눌렀는지 알 수 있게 잠깐 체크로 바꾼다 — 클립보드는 눈에 보이지 않는다 */
-async function copyToClipboard(text: string, btn: HTMLElement) {
+/** 눌렀는지 잠깐 보여준다 — 클립보드는 눈에 보이지 않는다 */
+async function copyToClipboard(text: string, btn: HTMLElement, done = '✓') {
   try {
     await navigator.clipboard.writeText(text)
   } catch (e) {
@@ -379,7 +379,7 @@ async function copyToClipboard(text: string, btn: HTMLElement) {
     return
   }
   const mark = btn.textContent
-  btn.textContent = '✓'
+  btn.textContent = done
   setTimeout(() => { btn.textContent = mark }, 1200)
 }
 
@@ -465,7 +465,11 @@ async function importFrom(file: File, btn: HTMLButtonElement) {
 }
 
 const homeTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone
-const copyEntry = (entry: LogEntry, btn: HTMLElement) => copyToClipboard(copyText(entry, homeTz()), btn)
+// 글 하나는 트위터 셈으로 몇 자인지 함께 보여준다 — 거기 붙이려고 하나만 복사한다
+const copyEntry = (entry: LogEntry, btn: HTMLElement) => {
+  const text = copyEntryText(entry)
+  return copyToClipboard(text, btn, `${tweetLength(text)}/${TWEET_LIMIT}`)
+}
 const copyGroup = (list: LogEntry[], btn: HTMLElement) => copyToClipboard(copyGroupText(list, homeTz()), btn)
 
 /* ---- sidebar ---- */

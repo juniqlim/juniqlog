@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { timeOf, dateOf, copyText, copyGroupText, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
+import { timeOf, dateOf, copyText, copyEntryText, copyGroupText, tweetLength, TWEET_LIMIT, groupByDate, visible, byTag, tagsOf } from '../src/timeline'
 
 
 describe('tagsOf', () => {
@@ -115,6 +115,53 @@ describe('copyText', () => {
 })
 
 
+describe('copyEntryText', () => {
+  // 한 건을 옮겨 붙일 자리는 대개 이미 언제인지 알고 있다 — 머리말은 방해가 된다
+  it('본문만 옮긴다', () => {
+    const entry = { created_at: '2026-07-24T14:32:07', body: '타코 먹고싶다', tags: ['일기'] }
+
+    expect(copyEntryText(entry)).toBe('타코 먹고싶다')
+  })
+
+  it('여러 줄 본문은 그대로 둔다', () => {
+    const entry = { created_at: '2026-07-24T09:05:07', body: '할 일\n- 하나\n- 둘' }
+
+    expect(copyEntryText(entry)).toBe('할 일\n- 하나\n- 둘')
+  })
+})
+
+
+describe('tweetLength', () => {
+  // 트위터는 글자마다 무게가 다르다 — 한도 280 안에 남는지 보려면 그 셈을 따라야 한다
+  it('영문과 숫자와 부호는 한 자다', () => {
+    expect(tweetLength('taco 12!')).toBe(8)
+  })
+
+  it('한글은 두 자다 — 한글만 쓰면 140자에서 끊긴다', () => {
+    expect(tweetLength('타코')).toBe(4)
+    expect(TWEET_LIMIT).toBe(280)
+  })
+
+  it('줄바꿈은 한 자다', () => {
+    expect(tweetLength('a\nb')).toBe(3)
+  })
+
+  it('이모지는 두 자다 — 여러 조각으로 이어 붙인 것도 하나로 센다', () => {
+    expect(tweetLength('🌮')).toBe(2)
+    expect(tweetLength('👨‍👩‍👧')).toBe(2)
+  })
+
+  it('링크는 길이와 상관없이 23자다 — 트위터가 제 주소로 바꾼다', () => {
+    expect(tweetLength('https://example.com/very/long/path?q=1')).toBe(23)
+    expect(tweetLength('보세요 https://example.com')).toBe(6 + 1 + 23)
+  })
+
+  it('빈 글은 0자다', () => {
+    expect(tweetLength('')).toBe(0)
+  })
+})
+
+
 describe('copyGroupText', () => {
   // 잘라 붙여도 각 글이 혼자 읽혀야 하므로 날짜를 글마다 붙인다
   it('글마다 년월일과 시각을 붙여 이어 놓는다', () => {
@@ -128,7 +175,7 @@ describe('copyGroupText', () => {
     )
   })
 
-  it('한 건이면 개별 복사와 똑같다', () => {
+  it('한 건이면 머리말 붙인 글 하나다', () => {
     const entries = [{ created_at: '2026-07-24T09:05:07', body: '아침' }]
 
     expect(copyGroupText(entries, HOME)).toBe(copyText(entries[0], HOME))

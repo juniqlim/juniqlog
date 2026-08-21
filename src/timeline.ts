@@ -69,6 +69,41 @@ export function copyText(entry: Copyable, homeTz: string): string {
   return `${copyHead(entry, homeTz)}\n${entry.body}`
 }
 
+/** 한 건만 옮길 때는 본문만 간다 — 붙일 자리는 대개 언제인지 이미 알고 있다 */
+export function copyEntryText(entry: Copyable): string {
+  return entry.body
+}
+
+/** 트위터가 한 번에 받는 무게 */
+export const TWEET_LIMIT = 280
+
+/** 링크는 무엇이든 t.co 주소로 바뀌어 이 길이가 된다 */
+const LINK_WEIGHT = 23
+const LINK = /https?:\/\/\S+/g
+
+/** 라틴·숫자·기본 부호는 가볍고, 그 밖(한글·한자·이모지)은 두 배다 */
+const LIGHT: [number, number][] = [
+  [0x0000, 0x10ff], [0x2000, 0x200d], [0x2010, 0x201f], [0x2032, 0x2037],
+]
+
+const segments = new Intl.Segmenter()
+
+/**
+ * 트위터가 세는 대로 센다 — 남은 자리를 알려면 그쪽 셈을 따라야 한다.
+ * 이어 붙인 이모지 한 덩어리는 하나로 보므로 글자가 아니라 자소 단위로 훑는다.
+ */
+export function tweetLength(text: string): number {
+  const links = text.match(LINK) ?? []
+  const rest = text.replace(LINK, '')
+
+  let weight = links.length * LINK_WEIGHT
+  for (const { segment } of segments.segment(rest.normalize('NFC'))) {
+    const code = segment.codePointAt(0)!
+    weight += LIGHT.some(([lo, hi]) => code >= lo && code <= hi) ? 1 : 2
+  }
+  return weight
+}
+
 /**
  * 하루치를 한 번에.
  * 날짜를 맨 위에 한 번만 쓰지 않는다 — 잘라 붙였을 때 각 글이 혼자 읽혀야 한다.
