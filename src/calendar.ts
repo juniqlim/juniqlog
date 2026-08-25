@@ -21,7 +21,7 @@ export function today(now: Date): YearMonthDay {
   return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() }
 }
 
-const asc = (a: number, b: number) => a - b
+const desc = (a: number, b: number) => b - a
 
 export function treeOf(isos: string[]): YearNode[] {
   const years = new Map<number, Map<number, Set<number>>>()
@@ -36,12 +36,12 @@ export function treeOf(isos: string[]): YearNode[] {
   }
 
   return [...years.entries()]
-    .sort(([a], [b]) => asc(a, b))
+    .sort(([a], [b]) => desc(a, b))
     .map(([year, months]) => ({
       year,
       months: [...months.entries()]
-        .sort(([a], [b]) => asc(a, b))
-        .map(([month, days]) => ({ month, days: [...days].sort(asc) })),
+        .sort(([a], [b]) => desc(a, b))
+        .map(([month, days]) => ({ month, days: [...days].sort(desc) })),
     }))
 }
 
@@ -64,8 +64,7 @@ export function daysAgo(days: number, now: Date): string {
 }
 
 export function latestMonth(tree: YearNode[]): YearMonth | null {
-  const lastYear = tree[tree.length - 1]
-  if (!lastYear) return null
-  const lastMonth = lastYear.months[lastYear.months.length - 1]
-  return { year: lastYear.year, month: lastMonth.month }
+  const newestYear = tree[0]
+  if (!newestYear) return null
+  return { year: newestYear.year, month: newestYear.months[0].month }
 }

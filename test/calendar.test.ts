@@ -29,7 +29,7 @@ describe('daysAgo', () => {
 
 
 describe('treeOf', () => {
-  it('연 > 월 > 일로 묶는다', () => {
+  it('연 > 월 > 일로 묶고, 최신이 위로 온다', () => {
     const isos = [
       '2025-03-10T09:00:00',
       '2024-12-01T09:00:00',
@@ -38,8 +38,8 @@ describe('treeOf', () => {
     ]
 
     expect(treeOf(isos)).toEqual([
+      { year: 2025, months: [{ month: 3, days: [10, 2] }, { month: 1, days: [5] }] },
       { year: 2024, months: [{ month: 12, days: [1] }] },
-      { year: 2025, months: [{ month: 1, days: [5] }, { month: 3, days: [2, 10] }] },
     ])
   })
 
@@ -88,8 +88,8 @@ describe('dayRange', () => {
 describe('latestMonth', () => {
   it('가장 최근 연월을 고른다', () => {
     const tree = [
+      { year: 2026, months: [{ month: 7, days: [24] }, { month: 1, days: [5] }] },
       { year: 2024, months: [{ month: 12, days: [1] }] },
-      { year: 2026, months: [{ month: 1, days: [5] }, { month: 7, days: [24] }] },
     ]
 
     expect(latestMonth(tree)).toEqual({ year: 2026, month: 7 })
