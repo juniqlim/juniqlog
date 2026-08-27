@@ -21,6 +21,7 @@ import { report, type Mark } from './boot'
 import { wasSignedIn } from './signedin'
 import { insideNative, fixFromNative } from './native'
 import { share } from './share'
+import { swipeAction, type Point } from './swipe'
 
 /** 뒤가 Supabase 인지 메모리인지 이 파일은 모른다 */
 const store: Store = pickStore()
@@ -480,6 +481,21 @@ const openSidebar = (on: boolean) => {
 
 $('menu').onclick = () => { renderSidebar(); openSidebar(true) }
 $('backdrop').onclick = () => openSidebar(false)
+
+let touchStart: Point | null = null
+document.addEventListener('touchstart', e => {
+  // 손가락 둘이면 확대다. 손짓으로 세지 않는다
+  touchStart = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null
+}, { passive: true })
+document.addEventListener('touchend', e => {
+  const start = touchStart
+  touchStart = null
+  if (!start) return
+  const t = e.changedTouches[0]
+  const act = swipeAction(start, { x: t.clientX, y: t.clientY }, !$('sidebar').hidden)
+  if (act === 'open') { renderSidebar(); openSidebar(true) }
+  else if (act === 'close') openSidebar(false)
+}, { passive: true })
 
 function pick(next: View) {
   view = next
